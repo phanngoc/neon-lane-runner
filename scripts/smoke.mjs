@@ -76,7 +76,16 @@ async function run(label, contextOptions, shots) {
       hud: document.getElementById('score').textContent,
     };
   });
-  check(`${label}: frames render`, snap.frames > 30, `${snap.frames} frames`);
+  // Assert the loop is advancing rather than hitting an arbitrary frame count:
+  // headless rAF pacing varies with how many contexts are alive.
+  const framePair = await page.evaluate(async () => {
+    const first = window.neonLaneRunner.frames;
+    await new Promise((r) => setTimeout(r, 300));
+    return { first, second: window.neonLaneRunner.frames };
+  });
+  check(`${label}: frames render`,
+    snap.frames > 10 && framePair.second > framePair.first,
+    `${snap.frames} frames, +${framePair.second - framePair.first} in 300ms`);
   check(`${label}: distance advances`, snap.distance > 10, `${snap.distance.toFixed(1)} m`);
   check(`${label}: track populated`, snap.obstacles > 0 && snap.coins > 0,
     `${snap.obstacles} obstacles / ${snap.coins} coins`);
@@ -123,15 +132,20 @@ async function run(label, contextOptions, shots) {
   // Coins are collected on contact.
   const coinsBefore = await page.evaluate(() => {
     const s = window.neonLaneRunner.state;
-    s.coins = [{ id: 4242, lane: s.player.lane, z: 0, y: 0.6, collected: false }];
+    s.player.x = s.player.targetLane;
+    s.player.lane = s.player.targetLane;
+    s.coins = [{ id: 4242, lane: s.player.targetLane, z: 0, y: 0.6, collected: false }];
     return s.coinsCollected;
   });
-  await page.waitForTimeout(200);
-  check(`${label}: coin pickup increments the counter`, await page.evaluate((before) => {
-    const s = window.neonLaneRunner.state;
-    return s.coinsCollected === before + 1 &&
-      document.getElementById('coins').textContent === String(s.coinsCollected);
-  }, coinsBefore));
+  const gotCoin = await page
+    .waitForFunction((before) => {
+      const s = window.neonLaneRunner.state;
+      return s.coinsCollected === before + 1 &&
+        document.getElementById('coins').textContent === String(s.coinsCollected);
+    }, coinsBefore, { timeout: 2000 })
+    .then(() => true)
+    .catch(() => false);
+  check(`${label}: coin pickup increments the counter and the HUD`, gotCoin);
 
   // Pause / resume.
   await page.keyboard.press('KeyP');
@@ -173,8 +187,12 @@ async function run(label, contextOptions, shots) {
   await page.evaluate(() => {
     const s = window.neonLaneRunner.state;
     s.distance = 500;
-    // Clear the generated track first so only the planted wall can end the run.
-    s.obstacles = [{ id: 99999, kind: 'wall', lane: s.player.lane, z: 3,
+    // Settle any in-flight lane change first: player.lane is a rounded position,
+    // so mid-interpolation it can name the lane the runner is leaving.
+    s.player.x = s.player.targetLane;
+    s.player.lane = s.player.targetLane;
+    // Clear the generated track so only the planted wall can end the run.
+    s.obstacles = [{ id: 99999, kind: 'wall', lane: s.player.targetLane, z: 3,
       depth: 1.1, yMin: 0, yMax: 2.6 }];
     s.nextSpawnZ = 1e6;
   });
