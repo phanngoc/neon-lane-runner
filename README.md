@@ -96,8 +96,9 @@ runner through a wall.
 **The 3D is a projection, not an engine.** The camera sits 6.2 units behind and
 2.55 units above the runner. `project(lane, y, z)` divides by depth to get a
 screen point, and everything — road, lane dividers, obstacle cuboids, coins,
-rails — is painted from that one function, far to near. Portrait viewports get a
-longer focal length so the three lanes stay readable on a phone.
+rails — is painted from that one function, far to near. Portrait viewports pull
+the camera back to 8.6 units and shorten the focal length, so a tall, narrow
+phone screen shows useful road ahead instead of filling up with the runner.
 
 Presentation and simulation communicate through a small one-shot `events` queue
 (`jump`, `slide`, `lane`, `coin`, `crash`) that the frame loop drains into sound
