@@ -3,13 +3,15 @@ import { playerHeight } from './logic';
 import type { Coin, GameState, Obstacle } from './types';
 
 const CENTER_LANE = (CONFIG.laneCount - 1) / 2;
-/** Camera sits this far behind the runner. */
-const CAM_BACK = 6.2;
+/** Camera distance behind the runner. Portrait pulls back so the tall, narrow
+ *  viewport does not fill up with the runner itself. */
+const CAM_BACK_WIDE = 6.2;
+const CAM_BACK_TALL = 8.6;
 const CAM_HEIGHT = 2.55;
 const ROAD_HALF = CONFIG.laneCount * CONFIG.laneWidth * 0.5 + 0.35;
 const FAR_Z = CONFIG.spawnDistance + 12;
-/** Near clip plane: just in front of the camera, so the road fills the bottom edge. */
-const NEAR_Z = -CAM_BACK + 1.1;
+/** Gap kept between the camera and the near clip plane. */
+const NEAR_GAP = 1.1;
 const ROAD_HALF_LANES = ROAD_HALF / CONFIG.laneWidth;
 
 const PALETTE = {
@@ -46,6 +48,9 @@ export class Renderer {
   private w = 0;
   private h = 0;
   private dpr = 1;
+  private camBack = CAM_BACK_WIDE;
+  /** Near clip plane, just in front of the camera. */
+  private nearZ = -CAM_BACK_WIDE + NEAR_GAP;
   private focal = 0;
   private horizon = 0;
   private cx = 0;
@@ -75,14 +80,17 @@ export class Renderer {
     this.w = cssWidth;
     this.h = cssHeight;
     this.cx = cssWidth / 2;
-    // Narrow (portrait) viewports need a longer focal length to keep lanes readable.
-    const aspect = cssWidth / cssHeight;
-    this.focal = cssHeight * (aspect < 0.8 ? 1.35 : 1.0);
-    this.horizon = cssHeight * 0.4;
+    // Portrait viewports pull the camera back and shorten the focal length, so
+    // the three lanes stay readable without the runner swallowing the screen.
+    const portrait = cssWidth / cssHeight < 0.8;
+    this.camBack = portrait ? CAM_BACK_TALL : CAM_BACK_WIDE;
+    this.nearZ = -this.camBack + NEAR_GAP;
+    this.focal = cssHeight * (portrait ? 1.05 : 1.0);
+    this.horizon = cssHeight * (portrait ? 0.34 : 0.4);
   }
 
   private project(laneX: number, y: number, z: number): Point | null {
-    const d = z + CAM_BACK;
+    const d = z + this.camBack;
     if (d <= 0.35) return null;
     const scale = this.focal / d;
     return {
@@ -92,7 +100,7 @@ export class Renderer {
   }
 
   private scaleAt(z: number): number {
-    return this.focal / Math.max(0.35, z + CAM_BACK);
+    return this.focal / Math.max(0.35, z + this.camBack);
   }
 
   burst(count: number, x: number, y: number, color: string, power = 220): void {
@@ -197,8 +205,8 @@ export class Renderer {
 
   private drawRoad(state: GameState): void {
     const ctx = this.ctx;
-    const nearL = this.project(CENTER_LANE - ROAD_HALF_LANES, 0, NEAR_Z);
-    const nearR = this.project(CENTER_LANE + ROAD_HALF_LANES, 0, NEAR_Z);
+    const nearL = this.project(CENTER_LANE - ROAD_HALF_LANES, 0, this.nearZ);
+    const nearR = this.project(CENTER_LANE + ROAD_HALF_LANES, 0, this.nearZ);
     const farL = this.project(CENTER_LANE - ROAD_HALF_LANES, 0, FAR_Z);
     const farR = this.project(CENTER_LANE + ROAD_HALF_LANES, 0, FAR_Z);
     if (!nearL || !nearR || !farL || !farR) return;
@@ -217,7 +225,7 @@ export class Renderer {
     const phase = state.distance % spacing;
     for (let i = 0; i < 18; i++) {
       const z = i * spacing - phase;
-      if (z < NEAR_Z) continue;
+      if (z < this.nearZ) continue;
       const a = this.project(0, 0, z);
       const b = this.project(0, 0, z + 0.9);
       if (!a || !b) continue;
@@ -238,7 +246,7 @@ export class Renderer {
     ctx.lineWidth = 2;
     for (let l = 0; l < CONFIG.laneCount - 1; l++) {
       const laneX = l + 0.5;
-      const a = this.project(laneX, 0, NEAR_Z);
+      const a = this.project(laneX, 0, this.nearZ);
       const b = this.project(laneX, 0, FAR_Z);
       if (!a || !b) continue;
       ctx.beginPath();
@@ -253,7 +261,7 @@ export class Renderer {
     ctx.shadowColor = PALETTE.roadEdge;
     ctx.shadowBlur = 16;
     for (const side of [-1, 1]) {
-      const a = this.project(CENTER_LANE + side * ROAD_HALF_LANES, 0, NEAR_Z);
+      const a = this.project(CENTER_LANE + side * ROAD_HALF_LANES, 0, this.nearZ);
       const b = this.project(CENTER_LANE + side * ROAD_HALF_LANES, 0, FAR_Z);
       if (!a || !b) continue;
       ctx.beginPath();
@@ -270,7 +278,7 @@ export class Renderer {
     const phase = state.distance % spacing;
     for (let i = 12; i >= 0; i--) {
       const z = i * spacing - phase;
-      if (z < NEAR_Z) continue;
+      if (z < this.nearZ) continue;
       for (const side of [-1, 1]) {
         const laneX = CENTER_LANE + (side * (ROAD_HALF + 0.5)) / CONFIG.laneWidth;
         const base = this.project(laneX, 0, z);
@@ -319,8 +327,8 @@ export class Renderer {
             : PALETTE.tram;
     const hw = 0.4;
     const zf = o.z + o.depth;
-    if (zf <= NEAR_Z) return;
-    const zn = Math.max(o.z, NEAR_Z);
+    if (zf <= this.nearZ) return;
+    const zn = Math.max(o.z, this.nearZ);
 
     const p = (dx: number, y: number, z: number) =>
       this.project(o.lane + dx, y, z);
