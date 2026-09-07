@@ -1,0 +1,245 @@
+:root {
+  --ink: #05010f;
+  --cyan: #25e5ff;
+  --pink: #ff2e88;
+  --mint: #7dfcd0;
+  --gold: #ffd447;
+  --panel: rgba(8, 3, 22, 0.86);
+  font-family: 'Trebuchet MS', 'Avenir Next', system-ui, sans-serif;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  height: 100%;
+  background: var(--ink);
+  color: #f4f0ff;
+  overflow: hidden;
+  overscroll-behavior: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+#stage {
+  position: fixed;
+  inset: 0;
+  touch-action: none;
+  user-select: none;
+}
+
+#scene {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+#hud {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: center;
+  gap: clamp(8px, 2.5vw, 22px);
+  padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  pointer-events: none;
+  background: linear-gradient(rgba(5, 1, 15, 0.72), rgba(5, 1, 15, 0));
+}
+
+.stat {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat .label {
+  font-size: clamp(9px, 2.2vw, 11px);
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(244, 240, 255, 0.55);
+}
+
+.stat span:last-child {
+  font-size: clamp(16px, 4.4vw, 26px);
+  font-weight: 700;
+  color: var(--mint);
+  text-shadow: 0 0 12px rgba(125, 252, 208, 0.55);
+}
+
+#best + .stat,
+.stat:nth-child(2) span:last-child {
+  color: var(--cyan);
+}
+
+.stat:nth-child(3) span:last-child {
+  color: var(--gold);
+}
+
+.stat:nth-child(4) span:last-child {
+  color: var(--pink);
+}
+
+.tools {
+  margin-left: auto;
+  display: flex;
+  gap: 8px;
+  pointer-events: auto;
+}
+
+.tools button {
+  width: 40px;
+  height: 40px;
+  font-size: 17px;
+  border-radius: 12px;
+  border: 1px solid rgba(37, 229, 255, 0.4);
+  background: var(--panel);
+  color: #f4f0ff;
+  cursor: pointer;
+}
+
+.tools button:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+#pads {
+  position: absolute;
+  inset: auto 0 max(14px, env(safe-area-inset-bottom)) 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr;
+  gap: 10px;
+  padding: 0 14px;
+  pointer-events: none;
+}
+
+.pad {
+  pointer-events: auto;
+  height: clamp(52px, 13vw, 68px);
+  border-radius: 16px;
+  border: 1px solid rgba(255, 255, 255, 0.18);
+  background: rgba(10, 4, 28, 0.55);
+  color: rgba(244, 240, 255, 0.8);
+  font-size: 20px;
+  cursor: pointer;
+  backdrop-filter: blur(4px);
+}
+
+.pad:active {
+  background: rgba(37, 229, 255, 0.28);
+}
+
+/* On pointer-precise devices the keyboard is the primary control scheme. */
+@media (hover: hover) and (pointer: fine) {
+  #pads {
+    display: none;
+  }
+}
+
+#stage[data-phase='menu'] #pads,
+#stage[data-phase='over'] #pads,
+#stage[data-phase='paused'] #pads {
+  opacity: 0;
+  pointer-events: none;
+}
+
+#overlay {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 24px;
+  text-align: center;
+  background: radial-gradient(
+    circle at 50% 45%,
+    rgba(42, 11, 74, 0.82),
+    rgba(5, 1, 15, 0.95)
+  );
+  backdrop-filter: blur(3px);
+}
+
+#overlay[hidden] {
+  display: none;
+}
+
+#overlay h1 {
+  margin: 0;
+  font-size: clamp(28px, 8vw, 54px);
+  letter-spacing: 0.04em;
+  color: var(--mint);
+  text-shadow:
+    0 0 18px rgba(125, 252, 208, 0.6),
+    0 0 44px rgba(255, 46, 136, 0.35);
+}
+
+#overlay-body {
+  max-width: 30rem;
+  font-size: clamp(13px, 3.4vw, 16px);
+  line-height: 1.55;
+  color: rgba(244, 240, 255, 0.86);
+}
+
+#overlay-body p {
+  margin: 0 0 10px;
+}
+
+#overlay-body .result {
+  font-size: clamp(20px, 5.5vw, 30px);
+  color: var(--gold);
+}
+
+#overlay-body .sub {
+  color: rgba(244, 240, 255, 0.65);
+}
+
+ul.keys {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+}
+
+ul.keys span {
+  display: inline-block;
+  min-width: 1.6em;
+  padding: 1px 6px;
+  margin-right: 4px;
+  border-radius: 6px;
+  border: 1px solid rgba(37, 229, 255, 0.45);
+  background: rgba(37, 229, 255, 0.1);
+  font-size: 0.88em;
+  text-align: center;
+}
+
+#overlay-action {
+  margin-top: 4px;
+  padding: 13px 30px;
+  font-size: clamp(15px, 4vw, 19px);
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  border: none;
+  border-radius: 999px;
+  background: linear-gradient(120deg, var(--pink), var(--cyan));
+  color: #05010f;
+  cursor: pointer;
+  box-shadow: 0 10px 30px rgba(255, 46, 136, 0.35);
+}
+
+#overlay-action:active {
+  transform: translateY(1px);
+}
+
+#overlay .hint {
+  margin: 0;
+  font-size: 11px;
+  letter-spacing: 0.05em;
+  color: rgba(244, 240, 255, 0.4);
+}

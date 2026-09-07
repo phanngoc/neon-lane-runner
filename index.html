@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover"
+    />
+    <meta name="theme-color" content="#05010f" />
+    <meta
+      name="description"
+      content="Neon Lane Runner - a three-lane endless runner you can play in the browser on desktop or mobile."
+    />
+    <title>Neon Lane Runner</title>
+    <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' fill='%2305010f'/%3E%3Cpath d='M6 26 L16 6 L26 26 Z' fill='%237dfcd0'/%3E%3C/svg%3E" />
+  </head>
+  <body>
+    <div id="stage" data-phase="menu">
+      <canvas id="scene" aria-label="Neon Lane Runner playfield" role="img"></canvas>
+
+      <header id="hud">
+        <div class="stat"><span class="label">Score</span><span id="score">0</span></div>
+        <div class="stat"><span class="label">Best</span><span id="best">0</span></div>
+        <div class="stat"><span class="label">Coins</span><span id="coins">0</span></div>
+        <div class="stat"><span class="label">Boost</span><span id="speed">0%</span></div>
+        <div class="tools">
+          <button id="pause" type="button" aria-label="Pause or resume">⏸</button>
+          <button id="mute" type="button" aria-label="Mute sound" aria-pressed="false">🔊</button>
+        </div>
+      </header>
+
+      <div id="pads" aria-hidden="false">
+        <button class="pad left" type="button" data-action="left" aria-label="Move left">◀</button>
+        <button class="pad jump" type="button" data-action="jump" aria-label="Jump">▲</button>
+        <button class="pad slide" type="button" data-action="slide" aria-label="Slide">▼</button>
+        <button class="pad right" type="button" data-action="right" aria-label="Move right">▶</button>
+      </div>
+
+      <section id="overlay" data-variant="menu">
+        <h1 id="overlay-title">Neon Lane Runner</h1>
+        <div id="overlay-body"></div>
+        <button id="overlay-action" type="button">Start run</button>
+        <p class="hint">Built as an original tribute to the endless-runner genre.</p>
+      </section>
+    </div>
+    <script type="module" src="/src/main.ts"></script>
+  </body>
+</html>
