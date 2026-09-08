@@ -282,6 +282,38 @@ html[data-effects='minimal'] .glyph-fx {
   max-width: min(32rem, 100%);
 }
 
+/* Short viewports (landscape phones) cannot fit the full card: the action
+   button ended up below the fold, which makes the primary control
+   unreachable. Tighten the card and drop the mission list, which is optional
+   and also shown on the menu, so the button always stays on screen. */
+@media (max-height: 540px) {
+  #overlay[data-variant='over'] {
+    padding-top: max(54px, calc(env(safe-area-inset-top) + 50px));
+    gap: 6px;
+  }
+
+  #overlay[data-variant='over'] h1 {
+    font-size: clamp(20px, 4.6vw, 28px);
+    padding: 4px 14px;
+  }
+
+  #overlay[data-variant='over'] ul.missions {
+    display: none;
+  }
+
+  #overlay[data-variant='over'] #overlay-body {
+    padding: 6px 0;
+  }
+
+  #overlay[data-variant='over'] #overlay-body .result {
+    font-size: 19px;
+  }
+
+  #overlay[data-variant='over'] #overlay-body .badge {
+    margin-bottom: 4px;
+  }
+}
+
 #overlay[data-variant='over'] h1,
 #overlay[data-variant='over'] #overlay-body {
   padding: 0 16px;
@@ -438,6 +470,14 @@ ul.keys span {
 
 #overlay-action:active {
   transform: translateY(1px);
+}
+
+/* The credit line belongs on the menu. On the game-over screen it lands on
+   top of the unblurred scene with no card behind it, where it is unreadable
+   and competes with the hazard the player is meant to be looking at. */
+#overlay[data-variant='over'] .hint,
+#overlay[data-variant='paused'] .hint {
+  display: none;
 }
 
 #overlay .hint {

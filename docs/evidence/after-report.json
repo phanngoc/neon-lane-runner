@@ -14,7 +14,8 @@
       "phase": "over",
       "title": "Ran into a wall",
       "cause": "wall",
-      "near": 0
+      "near": 0,
+      "badControls": []
     },
     "errors": []
   },
@@ -33,7 +34,8 @@
       "phase": "over",
       "title": "Ran into a wall",
       "cause": "wall",
-      "near": 0
+      "near": 0,
+      "badControls": []
     },
     "errors": []
   },
@@ -52,7 +54,8 @@
       "phase": "over",
       "title": "Ran into a wall",
       "cause": "wall",
-      "near": 0
+      "near": 0,
+      "badControls": []
     },
     "errors": []
   },
@@ -71,7 +74,8 @@
       "phase": "over",
       "title": "Ran into a wall",
       "cause": "wall",
-      "near": 0
+      "near": 0,
+      "badControls": []
     },
     "errors": []
   },
@@ -90,7 +94,8 @@
       "phase": "over",
       "title": "Ran into a wall",
       "cause": "wall",
-      "near": 0
+      "near": 0,
+      "badControls": []
     },
     "errors": []
   }

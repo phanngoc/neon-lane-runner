@@ -190,12 +190,35 @@ for (const v of VIEWPORTS) {
     { timeout: 90000 },
   );
   await page.waitForTimeout(250);
-  const over = await page.evaluate(() => ({
-    phase: window.neonLaneRunner.state.phase,
-    title: document.getElementById('overlay-title')?.textContent,
-    cause: window.neonLaneRunner.state.deathCause,
-    near: window.neonLaneRunner.state.nearMisses,
-  }));
+  const over = await page.evaluate(() => {
+    const vw = document.documentElement.clientWidth;
+    const vh = document.documentElement.clientHeight;
+    // Audit the overlay's own controls too. The play-time pass cannot see them
+    // because the overlay is hidden then, which is how a game-over button
+    // below the fold went unnoticed.
+    const bad = [];
+    for (const b of document.querySelectorAll('#overlay button')) {
+      const r = b.getBoundingClientRect();
+      if (getComputedStyle(b).display === 'none') continue;
+      const id = b.id || b.className;
+      if (r.width < 44 || r.height < 44) bad.push(`${id}=small`);
+      const cx = r.left + r.width / 2;
+      const cy = r.top + r.height / 2;
+      if (cx < 0 || cy < 0 || cx > vw || cy > vh) {
+        bad.push(`${id}=offscreen(top ${Math.round(r.top)} of ${vh})`);
+        continue;
+      }
+      const hit = document.elementFromPoint(cx, cy);
+      if (hit !== b && !b.contains(hit)) bad.push(`${id}=covered`);
+    }
+    return {
+      phase: window.neonLaneRunner.state.phase,
+      title: document.getElementById('overlay-title')?.textContent,
+      cause: window.neonLaneRunner.state.deathCause,
+      near: window.neonLaneRunner.state.nearMisses,
+      badControls: bad,
+    };
+  });
   await page.screenshot({ path: join(OUT, `${label}-${v.id}-3-over.png`) });
 
   report.push({ viewport: v.id, ...metrics, over, errors });
@@ -203,7 +226,9 @@ for (const v of VIEWPORTS) {
     `${v.id}  dprCap=${metrics.renderScale}  overflow=${metrics.horizontalOverflow}px  ` +
       `small=${metrics.smallTargets.length ? metrics.smallTargets.join(',') : 'none'}  ` +
       `unreachable=${metrics.unreachableTargets.length ? metrics.unreachableTargets.join(',') : 'none'}  ` +
-      `over="${over.title}" cause=${over.cause}  errors=${errors.length}`,
+      `over="${over.title}" cause=${over.cause}  ` +
+      `overControls=${over.badControls.length ? over.badControls.join(',') : 'ok'}  ` +
+      `errors=${errors.length}`,
   );
   await context.close();
 }

@@ -151,6 +151,7 @@ branch. Both were driven by the **same** scripts (`scripts/shots.mjs`,
 | Runner occludes next hazard | yes — 12.29 world units, past the 11-unit row gap | no — 5.75 units | closed form in `hazardVisibilityZ`, asserted in tests |
 | Horizontal overflow | 0 px | 0 px | `scrollWidth - clientWidth` |
 | Canvas backing store / CSS px | 2.0 mobile, 1.0 desktop | 2.0 mobile, 1.0 desktop | `canvas.width / rect.width` |
+| Game-over button reachable | on screen | on screen | `elementFromPoint` on `#overlay button`, in the game-over state |
 | Console + page errors | 0 | 0 | Playwright listeners |
 | Mean frame rate, 60 s after 5 s warm-up | 60.00 fps over 3601 frames | 60.00 fps over 3601 frames | `scripts/perf.mjs` |
 | Frame interval p50 / p90 / p99 / max | 16.7 / 16.7 / 16.8 / 16.8 ms | 16.7 / 16.7 / 16.8 / 16.8 ms | same |
@@ -174,6 +175,20 @@ Compare [`docs/evidence/before-390x844-play.png`](docs/evidence/before-390x844-p
 with [`docs/evidence/after-390x844-play.png`](docs/evidence/after-390x844-play.png):
 same seed, same score, same viewport. In the first the runner's body covers all
 but the top edge of the amber hurdle in its own lane.
+
+Two defects in this work were found by looking at the captures rather than by
+the checks, and both are worth recording because the checks had to be widened
+afterwards:
+
+- The boost chip shared a flex row with the tool buttons and pushed the third
+  one past the right edge at 390 px. A `scrollWidth` comparison cannot see that:
+  the HUD is absolutely positioned, so the button was clipped rather than
+  widening the document. The capture script now probes each control with
+  `elementFromPoint`.
+- On a short landscape viewport the game-over card ran past the bottom and left
+  **Run again** below the fold. The control audit missed it because it ran while
+  the overlay was hidden. It now runs in the game-over state too, and the card
+  tightens and drops the optional mission list under `max-height: 540px`.
 
 ### What the measurements do *not* show
 
