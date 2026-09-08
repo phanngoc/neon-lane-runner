@@ -64,8 +64,34 @@ export interface GameState {
   seed: number;
   /** One-shot events for the presentation layer to consume. */
   events: GameEvent[];
+  /** Which hazard ended the run. Drives the cause-of-death message. */
+  deathCause: ObstacleKind | null;
+  /** Obstacles cleared by a hair this run. Feedback only; never scored. */
+  nearMisses: number;
+  /** Hurdles cleared with a jump, for the jump mission. */
+  hurdlesCleared: number;
+  /** Beams cleared with a slide, for the slide mission. */
+  beamsCleared: number;
+  /** Ids already counted as a near miss, so each obstacle counts once. */
+  scoredNearMiss: Set<number>;
 }
 
-export type GameEvent = 'jump' | 'slide' | 'lane' | 'coin' | 'crash';
+/** A short, optional mastery goal. Progress is measured per run. */
+export interface Mission {
+  id: string;
+  label: string;
+  target: number;
+  /** Reads current progress out of a run. */
+  progress: (state: GameState) => number;
+}
+
+export type GameEvent =
+  | 'jump'
+  | 'slide'
+  | 'lane'
+  | 'coin'
+  | 'crash'
+  | 'nearmiss'
+  | 'mission';
 
 export type Action = 'left' | 'right' | 'jump' | 'slide';

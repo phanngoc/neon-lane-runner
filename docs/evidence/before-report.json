@@ -1,0 +1,97 @@
+[
+  {
+    "viewport": "360x640",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [
+      "pause=40x40",
+      "mute=40x40"
+    ],
+    "liveParticles": null,
+    "over": {
+      "phase": "over",
+      "title": "New best run!"
+    },
+    "errors": []
+  },
+  {
+    "viewport": "390x844",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [
+      "pause=40x40",
+      "mute=40x40"
+    ],
+    "liveParticles": null,
+    "over": {
+      "phase": "over",
+      "title": "New best run!"
+    },
+    "errors": []
+  },
+  {
+    "viewport": "430x932",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [
+      "pause=40x40",
+      "mute=40x40"
+    ],
+    "liveParticles": null,
+    "over": {
+      "phase": "over",
+      "title": "New best run!"
+    },
+    "errors": []
+  },
+  {
+    "viewport": "844x390",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [
+      "pause=40x40",
+      "mute=40x40"
+    ],
+    "liveParticles": null,
+    "over": {
+      "phase": "over",
+      "title": "New best run!"
+    },
+    "errors": []
+  },
+  {
+    "viewport": "1280x800",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 1,
+    "horizontalOverflow": 0,
+    "smallTargets": [
+      "pause=40x40",
+      "mute=40x40"
+    ],
+    "liveParticles": null,
+    "over": {
+      "phase": "over",
+      "title": "New best run!"
+    },
+    "errors": []
+  }
+]

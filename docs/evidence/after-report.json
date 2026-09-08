@@ -1,0 +1,102 @@
+[
+  {
+    "viewport": "360x640",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [],
+    "unreachableTargets": [],
+    "liveParticles": 0,
+    "over": {
+      "phase": "over",
+      "title": "Ran into a wall",
+      "cause": "wall",
+      "near": 0,
+      "badControls": []
+    },
+    "errors": []
+  },
+  {
+    "viewport": "390x844",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [],
+    "unreachableTargets": [],
+    "liveParticles": 0,
+    "over": {
+      "phase": "over",
+      "title": "Ran into a wall",
+      "cause": "wall",
+      "near": 0,
+      "badControls": []
+    },
+    "errors": []
+  },
+  {
+    "viewport": "430x932",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [],
+    "unreachableTargets": [],
+    "liveParticles": 0,
+    "over": {
+      "phase": "over",
+      "title": "Ran into a wall",
+      "cause": "wall",
+      "near": 0,
+      "badControls": []
+    },
+    "errors": []
+  },
+  {
+    "viewport": "844x390",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 2,
+    "horizontalOverflow": 0,
+    "smallTargets": [],
+    "unreachableTargets": [],
+    "liveParticles": 0,
+    "over": {
+      "phase": "over",
+      "title": "Ran into a wall",
+      "cause": "wall",
+      "near": 0,
+      "badControls": []
+    },
+    "errors": []
+  },
+  {
+    "viewport": "1280x800",
+    "phase": "running",
+    "distance": 41,
+    "pilotAlive": true,
+    "score": 41,
+    "renderScale": 1,
+    "horizontalOverflow": 0,
+    "smallTargets": [],
+    "unreachableTargets": [],
+    "liveParticles": 0,
+    "over": {
+      "phase": "over",
+      "title": "Ran into a wall",
+      "cause": "wall",
+      "near": 0,
+      "badControls": []
+    },
+    "errors": []
+  }
+]

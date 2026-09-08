@@ -1,0 +1,112 @@
+{
+  "$comment": "Machine-readable game spec. arcade.toml is the platform manifest; this file is the design/balance contract that the tests assert against.",
+  "id": "neon-lane-runner",
+  "name": "Neon Lane Runner",
+  "version": "1.1.0",
+  "genre": "endless runner, three lanes",
+  "engine": "canvas2d",
+  "renderer": { "type": "pseudo-3d projection", "dprCap": 2 },
+  "loop": {
+    "fixedStepSeconds": 0.008333333333333333,
+    "maxCatchUpSeconds": 0.25,
+    "deterministic": true,
+    "prng": "mulberry32, seeded per run"
+  },
+  "scoring": {
+    "formula": "floor(distance) + 10 * coins",
+    "distanceScorePerUnit": 1,
+    "coinValue": 10,
+    "unchangedSince": "1.0.0",
+    "$comment": "Near misses and missions deliberately do NOT feed the score, so leaderboard entries stay comparable with 1.0.0 runs."
+  },
+  "balance": {
+    "laneCount": 3,
+    "laneWidth": 1.35,
+    "laneChangeSeconds": 0.13,
+    "gravity": -26,
+    "jumpVelocity": 8.6,
+    "slideDurationSeconds": 0.55,
+    "startSpeed": 11,
+    "maxSpeed": 34,
+    "speedRampPerSecond": 0.42,
+    "warmupDistance": 30,
+    "rowGapMin": 11,
+    "rowGapMax": 19,
+    "spawnDistance": 95,
+    "spawnPatterns": 8
+  },
+  "hazards": [
+    { "kind": "wall", "answer": "change lane", "colour": "#FF4D3D", "silhouette": "full-height slab, half-width 0.40", "markings": "white outline + 3 diagonal slashes", "box": { "yMin": 0, "yMax": 2.6, "depth": 1.1 } },
+    { "kind": "tram", "answer": "change lane early", "colour": "#8A5CF6", "silhouette": "narrowest (0.34) but 14 units deep", "markings": "lit window band across the face and along the flank + 45-degree stripes", "box": { "yMin": 0, "yMax": 2.6, "depth": 14 } },
+    { "kind": "hurdle", "answer": "jump", "colour": "#FFC94D", "silhouette": "low and wide (0.43)", "markings": "rail on two posts above the box + up chevron", "box": { "yMin": 0, "yMax": 0.75, "depth": 0.9 } },
+    { "kind": "beam", "answer": "slide", "colour": "#38BDF8", "silhouette": "widest (0.45), suspended, no ground contact", "markings": "two cables reaching up + down chevron on the underside", "box": { "yMin": 0.95, "yMax": 2.9, "depth": 0.9 } }
+  ],
+  "generationContract": {
+    "everyRowAnswerable": "for at least one lane, every obstacle in it is a hurdle or a beam",
+    "noHurdleBeamOverlapInLane": "jumping and sliding are mutually exclusive, so a lane never holds both at overlapping depth",
+    "testedSeeds": 400,
+    "assertedIn": "tests/mobile.test.ts"
+  },
+  "camera": {
+    "portraitAspectThreshold": 0.8,
+    "portrait": { "back": 9.2, "height": 3.9, "focalPerViewportHeight": 0.95, "horizonPerViewportHeight": 0.3 },
+    "landscape": { "back": 6.2, "height": 2.55, "focalPerViewportHeight": 1.0, "horizonPerViewportHeight": 0.4 },
+    "occlusionContract": {
+      "formula": "hazardVisibilityZ = playerHeight * camBack / (camHeight - playerHeight)",
+      "requirement": "hazardVisibilityZ < balance.rowGapMin, so the next hazard row is never hidden behind the runner",
+      "measuredPortrait": 5.75,
+      "measuredLandscape": 8.86,
+      "portraitBefore_1_0_0": 12.29,
+      "assertedIn": "tests/mobile.test.ts"
+    }
+  },
+  "input": {
+    "gesture": { "swipeMinPx": 24, "axisDominance": 1.6, "tapSlopPx": 12, "tapMaxMs": 350 },
+    "rules": [
+      "one captured pointer at a time; extra pointers are ignored until release",
+      "a swipe is recognised mid-gesture and then locked, so one gesture yields exactly one action",
+      "a drag with no dominant axis yields no action rather than two",
+      "pointercancel, lost capture, window blur and tab hide all release the held gesture"
+    ],
+    "touchTargetMinPx": 44,
+    "touchActionScope": ["#scene", "#pads"]
+  },
+  "effects": {
+    "particlePool": 64,
+    "maxPerBurst": 12,
+    "maxLifeSeconds": 0.45,
+    "allocationsPerFrame": 0,
+    "shakeMaxPx": 3,
+    "shakeSeconds": 0.18,
+    "levels": ["full", "reduced", "minimal"],
+    "prefersReducedMotionDefault": "reduced",
+    "invariant": "at every level a hazard keeps its hue, its silhouette and its outline; no level removes danger information",
+    "drawOrder": ["sky", "road", "rails", "particles", "coins", "hazards", "player", "hud", "overlay"]
+  },
+  "feedback": {
+    "deathCauseShown": true,
+    "newBestIsSecondaryBadge": true,
+    "gameOverBlursScene": false,
+    "nearMiss": { "laneMargin": 0.22, "verticalMargin": 0.3, "scored": false, "shake": false, "particles": 4 }
+  },
+  "missions": [
+    { "id": "coins-30", "label": "Sweep 30 coins in one run", "target": 30 },
+    { "id": "distance-400", "label": "Reach 400 m", "target": 400 },
+    { "id": "near-8", "label": "Shave past 8 hazards", "target": 8 }
+  ],
+  "missionRules": ["optional", "no streaks", "no ads", "no payments", "never gate play"],
+  "onboarding": {
+    "type": "playable coach over the live game",
+    "steps": ["change lane", "jump", "slide", "collect a coin"],
+    "dismissal": "performing the action",
+    "runsOnce": true
+  },
+  "assets": {
+    "images": 0,
+    "audioFiles": 0,
+    "webFonts": 0,
+    "$comment": "Everything is drawn with Canvas 2D primitives and sound is synthesised with WebAudio oscillators. Fonts are the system-ui stack.",
+    "licence": "MIT (see LICENSE)"
+  },
+  "acceptanceViewports": ["360x640", "390x844", "430x932", "844x390", "1280x800"]
+}

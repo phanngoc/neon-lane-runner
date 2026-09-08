@@ -1,6 +1,7 @@
 import './style.css';
 import { Game } from './game/game';
 import type { Ui } from './game/game';
+import { advance } from './game/logic';
 
 function need<T extends HTMLElement>(id: string): T {
   const el = document.getElementById(id);
@@ -21,6 +22,9 @@ const ui: Ui = {
   overlayAction: need<HTMLButtonElement>('overlay-action'),
   pauseButton: need<HTMLButtonElement>('pause'),
   muteButton: need<HTMLButtonElement>('mute'),
+  effectsButton: need<HTMLButtonElement>('effects'),
+  boost: need('boost'),
+  coach: need('coach'),
   pads: need('pads'),
 };
 
@@ -31,6 +35,10 @@ game.start();
 declare global {
   interface Window {
     neonLaneRunner: Game;
+    __adv: (dt: number) => void;
   }
 }
 window.neonLaneRunner = game;
+// Deterministic stepping hook for scripts/shots.mjs: advances the simulation
+// without depending on wall-clock frames, so two builds render the same scene.
+window.__adv = (dt) => advance(game.state, dt);

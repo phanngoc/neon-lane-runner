@@ -1,5 +1,13 @@
 import { CONFIG, STEP } from './config';
-import type { Action, Coin, GameState, Obstacle, Player } from './types';
+import type {
+  Action,
+  Coin,
+  GameState,
+  Mission,
+  Obstacle,
+  ObstacleKind,
+  Player,
+} from './types';
 
 /** Half-width of an obstacle box expressed in lane units. */
 export const OBSTACLE_HALF_LANES = 0.38;
@@ -49,6 +57,11 @@ export function createState(best = 0, seed = 1): GameState {
     nextId: 1,
     seed,
     events: [],
+    deathCause: null,
+    nearMisses: 0,
+    hurdlesCleared: 0,
+    beamsCleared: 0,
+    scoredNearMiss: new Set<number>(),
   };
 }
 
@@ -100,6 +113,39 @@ export function reaches(player: Player, coin: Coin): boolean {
   if (Math.abs(coin.z) > CONFIG.playerDepth / 2 + 0.8) return false;
   const h = playerHeight(player);
   return coin.y > player.y - 0.7 && coin.y < player.y + h + 0.7;
+}
+
+/**
+ * How close a miss has to be to register. These are *smaller* than the
+ * collision box by construction, so a near miss can never be a hit and the
+ * feedback cannot change whether the run ends.
+ */
+export const NEAR_MISS = {
+  /** Lateral clearance in lane units, measured beyond the collision edge. */
+  lane: 0.22,
+  /** Vertical clearance in world units above/below the box. */
+  vertical: 0.3,
+} as const;
+
+/**
+ * True when the runner is passing this obstacle *without* touching it but
+ * inside the clearance margin. Purely presentational: `nearMisses` never feeds
+ * the score, so the leaderboard stays comparable with older runs.
+ */
+export function isNearMiss(player: Player, o: Obstacle): boolean {
+  const halfDepth = CONFIG.playerDepth / 2;
+  if (!overlaps(-halfDepth, halfDepth, o.z, o.z + o.depth)) return false;
+  if (hits(player, o)) return false;
+
+  const dx = Math.abs(player.x - o.lane);
+  const solidLane = PLAYER_HALF_LANES + OBSTACLE_HALF_LANES;
+  if (dx < solidLane + NEAR_MISS.lane) return true;
+
+  // Same lane but cleared vertically: squeezed over a hurdle or under a beam.
+  if (dx >= solidLane) return false;
+  const h = playerHeight(player);
+  if (player.y >= o.yMax && player.y - o.yMax <= NEAR_MISS.vertical) return true;
+  return o.yMin >= player.y + h && o.yMin - (player.y + h) <= NEAR_MISS.vertical;
 }
 
 export function queueAction(state: GameState, action: Action): void {
@@ -166,7 +212,7 @@ function coin(state: GameState, lane: number, z: number, y: number): Coin {
 /** Adds one solvable row of obstacles/coins at the given depth. */
 export function spawnRow(state: GameState, z: number): void {
   const lanes = [0, 1, 2];
-  const pattern = randInt(state, 7);
+  const pattern = randInt(state, 8);
   const pick = () => lanes[randInt(state, lanes.length)]!;
 
   if (pattern === 0) {
@@ -207,6 +253,22 @@ export function spawnRow(state: GameState, z: number): void {
     state.obstacles.push(obstacle(state, 'hurdle', hurdleLane, z));
     const free = lanes.find((l) => l !== wallLane && l !== hurdleLane)!;
     state.coins.push(coin(state, free, z, 0.6));
+  } else if (pattern === 6) {
+    // Route choice: a safe lane with a short coin line, and a risky lane whose
+    // longer, richer line is guarded by a hurdle you have to jump. Both routes
+    // are clear of the wall, so the row stays solvable without taking either.
+    const wallLane = pick();
+    const others = lanes.filter((l) => l !== wallLane);
+    const safeLane = others[randInt(state, others.length)]!;
+    const riskyLane = others.find((l) => l !== safeLane)!;
+    state.obstacles.push(obstacle(state, 'wall', wallLane, z));
+    for (let i = 0; i < 2; i++) {
+      state.coins.push(coin(state, safeLane, z + i * 2.4, 0.6));
+    }
+    state.obstacles.push(obstacle(state, 'hurdle', riskyLane, z));
+    for (let i = 0; i < 5; i++) {
+      state.coins.push(coin(state, riskyLane, z + 1.6 + i * 2.0, 1.55));
+    }
   } else {
     // Breather row: a line of coins that snakes across the lanes.
     const lane = pick();
@@ -271,16 +333,21 @@ function spawnAndCull(state: GameState): void {
       nextRandom(state) * (CONFIG.rowGapMax - CONFIG.rowGapMin);
     state.nextSpawnZ += gap;
   }
-  state.obstacles = state.obstacles.filter(
-    (o) => o.z + o.depth > CONFIG.cullDistance,
-  );
+  const kept: typeof state.obstacles = [];
+  for (const o of state.obstacles) {
+    if (o.z + o.depth > CONFIG.cullDistance) kept.push(o);
+    // Bound the near-miss ledger: an obstacle behind the camera can never be
+    // passed again, so its id is dropped instead of growing forever.
+    else state.scoredNearMiss.delete(o.id);
+  }
+  state.obstacles = kept;
   state.coins = state.coins.filter(
     (c) => c.z > CONFIG.cullDistance && !c.collected,
   );
 }
 
-/** Collects coins in reach and reports whether the runner struck an obstacle. */
-function resolveContacts(state: GameState): boolean {
+/** Collects coins in reach and reports the hazard struck, if any. */
+function resolveContacts(state: GameState): ObstacleKind | null {
   for (const c of state.coins) {
     if (!c.collected && reaches(state.player, c)) {
       c.collected = true;
@@ -291,10 +358,21 @@ function resolveContacts(state: GameState): boolean {
   for (const o of state.obstacles) {
     if (hits(state.player, o)) {
       state.events.push('crash');
-      return true;
+      return o.kind;
     }
   }
-  return false;
+  // Near misses are counted after the crash test so a fatal frame never also
+  // reports a near miss for the obstacle that killed the runner.
+  for (const o of state.obstacles) {
+    if (state.scoredNearMiss.has(o.id)) continue;
+    if (!isNearMiss(state.player, o)) continue;
+    state.scoredNearMiss.add(o.id);
+    state.nearMisses += 1;
+    if (o.kind === 'hurdle' && state.player.y > o.yMax) state.hurdlesCleared += 1;
+    if (o.kind === 'beam' && state.player.sliding) state.beamsCleared += 1;
+    state.events.push('nearmiss');
+  }
+  return null;
 }
 
 /** Advances the simulation by one fixed step. Exported for tests. */
@@ -302,10 +380,11 @@ export function stepOnce(state: GameState, dt: number = STEP): void {
   if (state.phase !== 'running') return;
   integrate(state, dt);
   spawnAndCull(state);
-  const crashed = resolveContacts(state);
+  const struck = resolveContacts(state);
   state.score = currentScore(state);
-  if (crashed) {
+  if (struck) {
     state.phase = 'over';
+    state.deathCause = struck;
     if (state.score > state.best) state.best = state.score;
   }
 }
@@ -318,4 +397,35 @@ export function advance(state: GameState, elapsed: number): void {
     stepOnce(state, dt);
     remaining -= dt;
   }
+}
+
+
+/**
+ * Short, optional mastery goals. They add a concrete reason to run again
+ * without touching the score formula, and nothing is gated behind them.
+ */
+export const MISSIONS: readonly Mission[] = [
+  {
+    id: 'coins-30',
+    label: 'Sweep 30 coins in one run',
+    target: 30,
+    progress: (s) => s.coinsCollected,
+  },
+  {
+    id: 'distance-400',
+    label: 'Reach 400 m',
+    target: 400,
+    progress: (s) => Math.floor(s.distance),
+  },
+  {
+    id: 'near-8',
+    label: 'Shave past 8 hazards',
+    target: 8,
+    progress: (s) => s.nearMisses,
+  },
+];
+
+/** Missions completed by the run that just ended. */
+export function completedMissions(state: GameState): Mission[] {
+  return MISSIONS.filter((m) => m.progress(state) >= m.target);
 }

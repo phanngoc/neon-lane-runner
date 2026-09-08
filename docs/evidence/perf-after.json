@@ -1,0 +1,21 @@
+{
+  "label": "perf-after",
+  "note": "Chromium (Playwright) on an Apple M1 laptop at 390x844 DPR2. NOT a physical phone.",
+  "frames": 3601,
+  "seconds": 60,
+  "meanFps": 60,
+  "intervalMs": {
+    "p50": 16.7,
+    "p90": 16.7,
+    "p99": 16.8,
+    "max": 16.8
+  },
+  "pctOver20ms": 0,
+  "pctOver33ms": 0,
+  "restarts": 5,
+  "liveParticlesAtEnd": 0,
+  "heapKbSamples": 60,
+  "heapKbFirst": 9766,
+  "heapKbLast": 9766,
+  "errors": []
+}
