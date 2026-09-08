@@ -57,7 +57,8 @@ body {
   right: 0;
   display: flex;
   align-items: center;
-  gap: clamp(8px, 2.5vw, 22px);
+  gap: clamp(8px, 2.2vw, 20px);
+  flex-wrap: nowrap;
   padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px
     max(14px, env(safe-area-inset-left));
   pointer-events: none;
@@ -93,7 +94,13 @@ body {
   color: var(--cyan);
 }
 
+/* Anchored just under the stat row rather than inside it: in the row it
+   competed with the tool buttons for width and pushed the third one off the
+   right edge at 390 px. */
 .chip {
+  position: absolute;
+  top: calc(100% - 6px);
+  left: max(14px, env(safe-area-inset-left));
   display: flex;
   align-items: baseline;
   gap: 6px;
@@ -118,7 +125,13 @@ body {
   margin-left: auto;
   display: flex;
   gap: 8px;
+  /* The tools never shrink; the stat block gives up width first. */
+  flex: 0 0 auto;
   pointer-events: auto;
+}
+
+#hud .stat {
+  min-width: 0;
 }
 
 .tools button:active {
