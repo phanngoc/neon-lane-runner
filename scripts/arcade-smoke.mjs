@@ -64,10 +64,14 @@ await page.waitForFunction(() => window.neonLaneRunner.state.phase === 'over',
 const runScore = await page.evaluate(() => window.neonLaneRunner.state.score);
 check('lượt chơi kết thúc với điểm > 0', runScore > 0, `score=${runScore}`);
 
+// Khớp cả playerId, KHÔNG chỉ khớp điểm: mỗi lần chạy test lại để lại đúng
+// khoảng điểm đó trên bảng, nên "có ai đó điểm 702" là tự lừa mình — phải là
+// CHÍNH lượt vừa chơi của CHÍNH người chơi này.
 const onBoard = await page
   .waitForFunction(async (score) => {
-    const rows = await window.ArcadeGame.top('alltime', 25);
-    return Array.isArray(rows) && rows.some((r) => r.score === score);
+    const me = window.ArcadeGame.playerId;
+    const rows = await window.ArcadeGame.top('alltime', 100);
+    return Array.isArray(rows) && rows.some((r) => r.score === score && r.playerId === me);
   }, runScore, { timeout: 15_000, polling: 700 })
   .then(() => true)
   .catch(() => false);
@@ -77,8 +81,9 @@ check('điểm vào bảng alltime và đọc ngược ra được', onBoard,
 
 const onDaily = await page
   .waitForFunction(async (score) => {
-    const rows = await window.ArcadeGame.top('daily', 25);
-    return Array.isArray(rows) && rows.some((r) => r.score === score);
+    const me = window.ArcadeGame.playerId;
+    const rows = await window.ArcadeGame.top('daily', 100);
+    return Array.isArray(rows) && rows.some((r) => r.score === score && r.playerId === me);
   }, runScore, { timeout: 10_000, polling: 700 })
   .then(() => true)
   .catch(() => false);

@@ -67,8 +67,7 @@ describe('arcade bridge wrapper', () => {
   it('takes a remote save that arrived before the game registered', () => {
     // Cuộc đua thật: save.get() là mạng, game đăng ký callback trong module defer.
     // Bridge giữ doc ở .remote; onRemoteBest phải đọc luôn thay vì chờ mãi.
-    const calls = installBridge();
-    (calls as unknown as Record<string, unknown>).unused = undefined;
+    installBridge();
     ((globalThis as Record<string, unknown>).ArcadeGame as Record<string, unknown>).remote = {
       best: 777,
     };
