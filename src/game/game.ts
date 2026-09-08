@@ -1,3 +1,4 @@
+import { onRemoteBest, submitRun, syncBest, track } from './arcade';
 import { Audio } from './audio';
 import { CONFIG } from './config';
 import { attachInput } from './input';
@@ -72,6 +73,14 @@ export class Game {
         this.input((pad as HTMLElement).dataset.action as Action);
       });
     }
+
+    // Save từ máy khác về: chỉ nhận kỷ lục CAO HƠN, không bao giờ để tụt.
+    onRemoteBest((best) => {
+      if (best <= this.state.best) return;
+      this.state.best = best;
+      saveBest(best);
+      this.updateHud();
+    });
 
     this.showMenu();
     this.syncMuteButton();
@@ -235,6 +244,11 @@ export class Game {
 
     if (wasRunning && this.state.phase === 'over') {
       saveBest(this.state.best);
+      // Platform: điểm lượt vừa xong lên bảng, kỷ lục lên cloud save. Cả hai
+      // nuốt lỗi trong arcade.ts nên platform chết cũng không chặn game over.
+      submitRun(this.state.score);
+      syncBest(this.state.best);
+      track('run_over', { score: this.state.score, coins: this.state.coinsCollected });
       this.showGameOver();
     }
 

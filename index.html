@@ -43,6 +43,11 @@
         <p class="hint">Built as an original tribute to the endless-runner genre.</p>
       </section>
     </div>
+    <!-- Platform Arcade: nạp TRƯỚC module game để window.ArcadeGame sẵn sàng.
+         Đường dẫn tương đối vì bundle được phục vụ ở /g/<id>/ lẫn ở gốc domain. -->
+    <script>window.ARCADE_GAME_ID = "neon-lane-runner";</script>
+    <script src="vendor/arcade.js"></script>
+    <script src="arcade-bridge.js"></script>
     <script type="module" src="/src/main.ts"></script>
   </body>
 </html>

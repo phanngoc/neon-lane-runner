@@ -6,7 +6,7 @@ hurdles, slide under the overhead beams, and hoover up coins while the city
 keeps getting faster.
 
 TypeScript + Vite, rendered with a hand-rolled pseudo-3D projection on a single
-Canvas 2D context. No game engine, no asset downloads, no backend.
+Canvas 2D context. No game engine, no asset downloads, no required backend.
 
 ![Desktop gameplay](docs/screenshot-desktop-play.png)
 
@@ -170,9 +170,10 @@ Code and assets are MIT licensed (see [LICENSE](LICENSE)).
   briefly z-fight at their shared edge.
 - Audio needs a user gesture before it starts (a browser autoplay rule), so the
   first sound arrives with the first tap or key press.
-- The best score is per-browser `localStorage`. There is no account, sync or
-  leaderboard, and it silently does not persist in private-browsing modes that
-  block storage.
+- The best score is per-browser `localStorage` when the game runs standalone. It
+  silently does not persist in private-browsing modes that block storage.
+- Leaderboards and cloud save only exist when the Arcade platform serves the
+  game (see below); standalone builds keep working exactly as before.
 - Difficulty ramps on time alone. Row patterns are drawn uniformly at random, so
   the mix of hazards does not get harder as speed rises — only the reaction time
   shrinks.
@@ -180,3 +181,33 @@ Code and assets are MIT licensed (see [LICENSE](LICENSE)).
 - The smoke test covers Chromium only. Firefox and Safari are untested beyond
   manual checks, though the code uses no Chromium-specific APIs.
 - Landscape phones work but the HUD and pads are tuned for portrait.
+
+## Arcade platform
+
+The game is playable as a plain static bundle with no server at all. When it is
+served by the Arcade platform it additionally gets a leaderboard and cloud save.
+
+- `arcade.toml` declares the manifest: `mode = "offline"`, boards `daily` and
+  `alltime`, `client_dir = "dist"` (this is a Vite build, so the static files are
+  in `dist/`, not the repo root).
+- `public/vendor/arcade.js` is the platform SDK, `public/arcade-bridge.js` the
+  shim that exposes `window.ArcadeGame`, and `src/game/arcade.ts` the typed
+  wrapper the game calls.
+- The bridge only activates when the page is actually served by the platform
+  (path `/g/<id>/`, or an explicit `window.ARCADE_BASE_URL`). Anywhere else it
+  issues no requests at all, so a standalone deploy stays silent instead of
+  logging 404s for an API that is not there.
+- Every platform call swallows its own errors. If the platform is down the game
+  behaves exactly as it did before this integration.
+
+Tests:
+
+```
+npm test            # unit, includes the bridge fallback contract
+npm run smoke       # browser, platform deliberately absent
+npm run smoke:arcade [baseUrl]   # browser, against a running platform
+```
+
+`smoke:arcade` proves the parts the other two cannot: guest auth against the real
+API, a finished run reaching both boards and reading back, and the personal best
+returning from cloud save after the local copy is deleted.

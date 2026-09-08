@@ -1,0 +1,20 @@
+[game]
+id          = "neon-lane-runner"
+name        = "Neon Lane Runner"
+version     = "1.0.0"
+engine      = "canvas2d"
+orientation = "any"
+# Game này build bằng vite: file tĩnh nằm ở dist/, không phải gốc repo.
+client_dir  = "dist"
+
+[runtime]
+# Chơi đơn, không phòng/không đồng bộ mạng -> offline. Rooms API của SDK chỉ
+# dùng được với mode authoritative/relay (packages/sdk/src/index.ts:170).
+mode = "offline"
+
+[capabilities]
+save        = true
+leaderboard = ["daily", "alltime"]
+
+[limits]
+bundle_bytes = 5242880
