@@ -6,13 +6,51 @@ const CENTER_LANE = (CONFIG.laneCount - 1) / 2;
 /** Camera distance behind the runner. Portrait pulls back so the tall, narrow
  *  viewport does not fill up with the runner itself. */
 const CAM_BACK_WIDE = 6.2;
-const CAM_BACK_TALL = 8.6;
-const CAM_HEIGHT = 2.55;
+const CAM_BACK_TALL = 9.2;
+/** Eye height. Portrait sits higher so the runner stops covering low hazards
+ *  in its own lane — see `hazardVisibilityZ` for the exact relationship. */
+const CAM_HEIGHT_WIDE = 2.55;
+const CAM_HEIGHT_TALL = 3.9;
 const ROAD_HALF = CONFIG.laneCount * CONFIG.laneWidth * 0.5 + 0.35;
 const FAR_Z = CONFIG.spawnDistance + 12;
 /** Gap kept between the camera and the near clip plane. */
 const NEAR_GAP = 1.1;
 const ROAD_HALF_LANES = ROAD_HALF / CONFIG.laneWidth;
+/** Aspect ratio at or below which the portrait camera is used. */
+export const PORTRAIT_ASPECT = 0.8;
+
+/**
+ * Nearest depth at which a ground-standing hazard in the runner's own lane is
+ * fully clear of the runner's silhouette.
+ *
+ * The runner is drawn at z = 0, so its head lands at screen
+ * `horizon + (camHeight - playerHeight) * focal / camBack`, while the foot of a
+ * hazard at depth z lands at `horizon + camHeight * focal / (z + camBack)`.
+ * Requiring the hazard's foot to sit *above* the runner's head cancels both
+ * `focal` and `horizon`, leaving a pure camera relationship:
+ *
+ *     z > playerHeight * camBack / (camHeight - playerHeight)
+ *
+ * Keeping this below `CONFIG.rowGapMin` is what guarantees the *next* hazard
+ * row is never hidden behind the runner, whatever the viewport size.
+ */
+export function hazardVisibilityZ(camBack: number, camHeight: number): number {
+  return (CONFIG.playerHeight * camBack) / (camHeight - CONFIG.playerHeight);
+}
+
+/** The camera the renderer will pick for a viewport, without needing a canvas. */
+export function cameraFor(cssWidth: number, cssHeight: number): {
+  portrait: boolean;
+  camBack: number;
+  camHeight: number;
+} {
+  const portrait = cssWidth / cssHeight < PORTRAIT_ASPECT;
+  return {
+    portrait,
+    camBack: portrait ? CAM_BACK_TALL : CAM_BACK_WIDE,
+    camHeight: portrait ? CAM_HEIGHT_TALL : CAM_HEIGHT_WIDE,
+  };
+}
 
 const PALETTE = {
   skyTop: '#05010f',
@@ -49,6 +87,7 @@ export class Renderer {
   private h = 0;
   private dpr = 1;
   private camBack = CAM_BACK_WIDE;
+  private camHeight = CAM_HEIGHT_WIDE;
   /** Near clip plane, just in front of the camera. */
   private nearZ = -CAM_BACK_WIDE + NEAR_GAP;
   private focal = 0;
@@ -82,11 +121,12 @@ export class Renderer {
     this.cx = cssWidth / 2;
     // Portrait viewports pull the camera back and shorten the focal length, so
     // the three lanes stay readable without the runner swallowing the screen.
-    const portrait = cssWidth / cssHeight < 0.8;
-    this.camBack = portrait ? CAM_BACK_TALL : CAM_BACK_WIDE;
+    const cam = cameraFor(cssWidth, cssHeight);
+    this.camBack = cam.camBack;
+    this.camHeight = cam.camHeight;
     this.nearZ = -this.camBack + NEAR_GAP;
-    this.focal = cssHeight * (portrait ? 1.05 : 1.0);
-    this.horizon = cssHeight * (portrait ? 0.34 : 0.4);
+    this.focal = cssHeight * (cam.portrait ? 0.95 : 1.0);
+    this.horizon = cssHeight * (cam.portrait ? 0.3 : 0.4);
   }
 
   private project(laneX: number, y: number, z: number): Point | null {
@@ -95,7 +135,7 @@ export class Renderer {
     const scale = this.focal / d;
     return {
       x: this.cx + (laneX - CENTER_LANE) * CONFIG.laneWidth * scale,
-      y: this.horizon + (CAM_HEIGHT - y) * scale,
+      y: this.horizon + (this.camHeight - y) * scale,
     };
   }
 
