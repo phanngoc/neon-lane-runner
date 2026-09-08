@@ -218,7 +218,7 @@ Commands and their results on macOS 15 (Darwin 25.5.0), Node v24.13.0:
 $ npm run build
 ✓ tsc --noEmit clean
 ✓ built in 106ms  dist/assets/index-*.js 30.24 kB (gzip 10.82 kB)
-                  dist/assets/index-*.css 6.49 kB (gzip 2.16 kB)
+                  dist/assets/index-*.css 7.02 kB (gzip 2.24 kB)
 
 $ npm test
 ✓ tests/arcade.test.ts (7 tests)
