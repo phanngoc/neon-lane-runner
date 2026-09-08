@@ -12,7 +12,9 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "smoke": "node scripts/smoke.mjs",
-    "smoke:arcade": "node scripts/arcade-smoke.mjs"
+    "smoke:arcade": "node scripts/arcade-smoke.mjs",
+    "shots": "node scripts/shots.mjs dist docs/evidence after",
+    "perf": "node scripts/perf.mjs dist docs/evidence perf-after"
   },
   "devDependencies": {
     "playwright": "1.47.2",

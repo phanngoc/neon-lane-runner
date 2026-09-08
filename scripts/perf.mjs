@@ -20,9 +20,12 @@ const MEASURE_MS = 60000;
 const MIME = { '.html': 'text/html', '.js': 'text/javascript', '.css': 'text/css', '.svg': 'image/svg+xml' };
 const server = createServer(async (req, res) => {
   const p = normalize(decodeURIComponent((req.url ?? '/').split('?')[0]));
+  const file = join(ROOT, p === '/' ? 'index.html' : p);
   try {
-    const body = await readFile(join(ROOT, p === '/' ? 'index.html' : p));
-    res.writeHead(200, { 'content-type': MIME[extname(p)] ?? 'application/octet-stream' });
+    const body = await readFile(file);
+    // extname of the resolved file, not of the URL: the root request has no
+    // extension and was being served as a download, which aborts navigation.
+    res.writeHead(200, { 'content-type': MIME[extname(file)] ?? 'application/octet-stream' });
     res.end(body);
   } catch {
     res.writeHead(404).end('not found');
@@ -99,7 +102,10 @@ await page.evaluate(
           }
         }
         if (t > warmup + measure) {
-          return done({ intervals, heap, restarts, particles: g.renderer.liveParticles() });
+          // The baseline build has no particle probe; report null rather than
+          // throwing, so the same script measures both builds.
+          const particles = g.renderer?.liveParticles?.() ?? null;
+          return done({ intervals, heap, restarts, particles });
         }
         requestAnimationFrame(tick);
       };
