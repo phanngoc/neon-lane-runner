@@ -2,10 +2,44 @@ import { onRemoteBest, submitRun, syncBest, track } from './arcade';
 import { Audio } from './audio';
 import { CONFIG } from './config';
 import { attachInput } from './input';
-import { advance, createState, queueAction, resetRun } from './logic';
-import { Renderer } from './render';
+import {
+  advance,
+  completedMissions,
+  createState,
+  MISSIONS,
+  queueAction,
+  resetRun,
+} from './logic';
+import { EFFECTS, Renderer } from './render';
+import type { EffectLevel } from './render';
 import { loadBest, loadMuted, saveBest, saveMuted } from './storage';
-import type { Action, GameState } from './types';
+import { loadEffects, loadMissions, saveEffects, saveMissions } from './storage';
+import type { Action, GameState, ObstacleKind } from './types';
+
+/**
+ * What killed the runner, and the one thing to do differently. The previous
+ * build replaced this with "New best run!" whenever the score was a record,
+ * which on a first run is *every* death -- so the failure feedback was hidden
+ * behind the achievement feedback.
+ */
+const CAUSE: Record<ObstacleKind, { title: string; advice: string }> = {
+  wall: {
+    title: 'Ran into a wall',
+    advice: 'Walls fill a whole lane. Swipe left or right to go around one.',
+  },
+  tram: {
+    title: 'Clipped a tram',
+    advice: 'Trams are long. Change lane as soon as you see one, not at the last moment.',
+  },
+  hurdle: {
+    title: 'Tripped on a hurdle',
+    advice: 'Hurdles are low and carry a rail on top. Swipe up to jump them.',
+  },
+  beam: {
+    title: 'Hit an overhead beam',
+    advice: 'Beams hang from above on two cables. Swipe down to slide under.',
+  },
+};
 
 interface Ui {
   root: HTMLElement;
@@ -20,13 +54,38 @@ interface Ui {
   overlayAction: HTMLButtonElement;
   pauseButton: HTMLButtonElement;
   muteButton: HTMLButtonElement;
+  effectsButton: HTMLButtonElement;
+  /** Speed chip; only shown while the run is still accelerating. */
+  boost: HTMLElement;
+  /** One-line coach shown over the live game during the first run. */
+  coach: HTMLElement;
   pads: HTMLElement;
 }
+
+/**
+ * Playable onboarding. Each step is a single instruction shown over the live
+ * game and dismissed by doing the thing, so the controls are learned by using
+ * them rather than by reading a wall of rules. It runs once per device.
+ */
+const COACH_STEPS: Array<{ text: string; done: (s: GameState) => boolean }> = [
+  {
+    text: 'Swipe left or right to change lane',
+    done: (s) => s.player.targetLane !== 1,
+  },
+  { text: 'Swipe up to jump', done: (s) => !s.player.grounded },
+  { text: 'Swipe down to slide under beams', done: (s) => s.player.sliding },
+  { text: 'Now sweep up coins and stay alive', done: (s) => s.coinsCollected > 0 },
+];
 
 export class Game {
   readonly state: GameState;
   private readonly renderer: Renderer;
   private readonly audio = new Audio();
+  /** Missions already completed across sessions; used to show fresh goals. */
+  private done = new Set<string>();
+  private reducedMotion = false;
+  private coachStep = 0;
+  private coachActive = false;
   private detachInput: (() => void) | null = null;
   private raf = 0;
   private lastFrame = 0;
@@ -39,6 +98,36 @@ export class Game {
     this.renderer = new Renderer(ui.canvas, ctx);
     this.state = createState(loadBest());
     this.audio.setMuted(loadMuted());
+    this.done = loadMissions();
+    this.applyEffectLevel(loadEffects());
+  }
+
+  /**
+   * Effects have three levels. `reduced` halves particle bursts and drops the
+   * shake; `minimal` removes both. At every level a hazard keeps its own hue,
+   * its own silhouette and its outline, so nothing that can kill the player is
+   * ever expressed by an effect alone.
+   */
+  private applyEffectLevel(level: EffectLevel | null): void {
+    const media =
+      typeof window.matchMedia === 'function'
+        ? window.matchMedia('(prefers-reduced-motion: reduce)')
+        : null;
+    this.reducedMotion = media ? media.matches : false;
+    // An explicit choice wins; otherwise the OS preference selects `reduced`.
+    const resolved: EffectLevel = level ?? (this.reducedMotion ? 'reduced' : 'full');
+    this.renderer.effects = resolved;
+    document.documentElement.dataset.effects = resolved;
+  }
+
+  /** Cycles full -> reduced -> minimal and persists the choice. */
+  cycleEffects(): EffectLevel {
+    const order: EffectLevel[] = ['full', 'reduced', 'minimal'];
+    const next = order[(order.indexOf(this.renderer.effects) + 1) % order.length]!;
+    this.renderer.effects = next;
+    document.documentElement.dataset.effects = next;
+    saveEffects(next);
+    return next;
   }
 
   start(): void {
@@ -66,6 +155,11 @@ export class Game {
       e.stopPropagation();
       this.toggleMute();
     });
+    this.ui.effectsButton.addEventListener('click', (e) => {
+      e.stopPropagation();
+      const level = this.cycleEffects();
+      this.ui.effectsButton.setAttribute('aria-label', `Visual effects: ${level}`);
+    });
     for (const pad of Array.from(this.ui.pads.querySelectorAll('[data-action]'))) {
       pad.addEventListener('pointerdown', (e) => {
         e.stopPropagation();
@@ -82,8 +176,14 @@ export class Game {
       this.updateHud();
     });
 
+    // First-ever session on this device gets the playable coach.
+    this.coachActive = this.done.size === 0 && loadBest() === 0;
     this.showMenu();
     this.syncMuteButton();
+    this.ui.effectsButton.setAttribute(
+      'aria-label',
+      `Visual effects: ${this.renderer.effects}`,
+    );
     this.lastFrame = performance.now();
     this.raf = requestAnimationFrame(this.frame);
   }
@@ -123,6 +223,7 @@ export class Game {
     this.audio.unlock();
     if (this.state.phase === 'menu' || this.state.phase === 'over') {
       resetRun(this.state, (this.state.seed ^ Math.floor(performance.now())) | 1);
+      this.coachStep = 0;
       this.hideOverlay();
       this.ui.pauseButton.disabled = false;
     } else if (this.state.phase === 'paused') {
@@ -165,18 +266,34 @@ export class Game {
 
   private showMenu(): void {
     this.ui.pauseButton.disabled = true;
+    // Keyboard hints are pointless on a phone, so the menu only lists the
+    // scheme the device actually has. The rest is taught by the coach.
+    const keyboard =
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(hover: hover) and (pointer: fine)').matches;
+    const controls = keyboard
+      ? `<ul class="keys">
+           <li><span>&larr; &rarr;</span> change lane</li>
+           <li><span>&uarr;</span> / <span>Space</span> jump over hurdles</li>
+           <li><span>&darr;</span> slide under beams</li>
+           <li><span>P</span> pause &nbsp;·&nbsp; <span>M</span> mute</li>
+         </ul>`
+      : `<ul class="keys">
+           <li><span>&#8592;&#8594;</span> swipe sideways to change lane</li>
+           <li><span>&#8593;</span> swipe up, or tap, to jump</li>
+           <li><span>&#8595;</span> swipe down to slide</li>
+         </ul>`;
+    const goals = MISSIONS.map(
+      (m) => `<li class="${this.done.has(m.id) ? 'hit' : ''}">
+        <span class="goal">${m.label}</span>
+        <span class="prog">${this.done.has(m.id) ? 'done ✓' : `0/${m.target}`}</span></li>`,
+    ).join('');
     this.showOverlay(
       'Neon Lane Runner',
-      `<p>Sprint down three neon lanes. Dodge walls, <strong>jump</strong> hurdles,
-       <strong>slide</strong> under beams and sweep up coins. The city speeds up the
-       longer you survive.</p>
-       <ul class="keys">
-         <li><span>&larr; &rarr;</span> or <span>A / D</span> — change lane</li>
-         <li><span>&uarr;</span>, <span>W</span> or <span>Space</span> — jump</li>
-         <li><span>&darr;</span> or <span>S</span> — slide</li>
-         <li><span>P</span> / <span>Esc</span> — pause &nbsp;·&nbsp; <span>M</span> — mute</li>
-         <li>Touch: swipe left/right/up/down, tap to jump</li>
-       </ul>`,
+      `<p>Three lanes. Go around walls and trams, jump hurdles, slide under
+       beams. The city speeds up the longer you last.</p>
+       ${controls}
+       <ul class="missions">${goals}</ul>`,
       'Start run',
       'menu',
     );
@@ -185,12 +302,29 @@ export class Game {
   private showGameOver(): void {
     const s = this.state;
     const isBest = s.score >= s.best && s.score > 0;
+    const cause = s.deathCause ? CAUSE[s.deathCause] : null;
     this.ui.pauseButton.disabled = true;
+
+    const cleared = completedMissions(s);
+    for (const m of cleared) this.done.add(m.id);
+    if (cleared.length > 0) saveMissions(this.done);
+
+    const badge = isBest ? '<p class="badge">New best</p>' : '';
+    const missionRows = MISSIONS.map((m) => {
+      const at = Math.min(m.progress(s), m.target);
+      const hit = at >= m.target;
+      return `<li class="${hit ? 'hit' : ''}"><span class="goal">${m.label}</span>
+        <span class="prog">${at}/${m.target}${hit ? ' ✓' : ''}</span></li>`;
+    }).join('');
+
     this.showOverlay(
-      isBest ? 'New best run!' : 'Wiped out',
-      `<p class="result">Score <strong>${s.score}</strong></p>
+      cause ? cause.title : 'Run over',
+      `${badge}
+       <p class="advice">${cause ? cause.advice : ''}</p>
+       <p class="result">Score <strong>${s.score}</strong></p>
        <p class="sub">${s.coinsCollected} coins · ${Math.floor(s.distance)} m ·
-       best ${s.best}</p>`,
+       ${s.nearMisses} near miss${s.nearMisses === 1 ? '' : 'es'} · best ${s.best}</p>
+       <ul class="missions">${missionRows}</ul>`,
       'Run again',
       'over',
     );
@@ -215,6 +349,28 @@ export class Game {
     this.ui.root.dataset.phase = 'running';
   }
 
+  /** Advances the coach when the player performs the current instruction. */
+  private updateCoach(): void {
+    if (!this.coachActive || this.state.phase !== 'running') {
+      this.ui.coach.hidden = true;
+      return;
+    }
+    const step = COACH_STEPS[this.coachStep];
+    if (!step) {
+      this.coachActive = false;
+      this.ui.coach.hidden = true;
+      return;
+    }
+    if (step.done(this.state)) {
+      this.coachStep += 1;
+      return;
+    }
+    this.ui.coach.hidden = false;
+    if (this.ui.coach.textContent !== step.text) {
+      this.ui.coach.textContent = step.text;
+    }
+  }
+
   private consumeEvents(): void {
     const s = this.state;
     if (s.events.length === 0) return;
@@ -225,8 +381,13 @@ export class Game {
         this.renderer.burst(6, pos.x, pos.y, '#ffd447', 140);
       } else if (e === 'crash') {
         const pos = this.renderer.screenOf(s.player.x, s.player.y + 0.8, 0);
-        this.renderer.burst(46, pos.x, pos.y, '#ff2e88', 320);
-        this.renderer.shake = 1;
+        this.renderer.burst(EFFECTS.maxPerBurst, pos.x, pos.y, '#FF4D3D', 320);
+        this.renderer.kick();
+      } else if (e === 'nearmiss') {
+        // Deliberately small: a short spark beside the runner, no shake and no
+        // score change, so a lucky squeeze reads as skill without nagging.
+        const pos = this.renderer.screenOf(s.player.x, s.player.y + 0.7, 0.4);
+        this.renderer.burst(4, pos.x, pos.y, '#38BDF8', 120);
       }
     }
     s.events.length = 0;
@@ -255,6 +416,7 @@ export class Game {
     this.renderer.updateEffects(dt);
     this.renderer.draw(this.state);
     this.updateHud();
+    this.updateCoach();
   };
 
   private updateHud(): void {
@@ -262,10 +424,17 @@ export class Game {
     this.ui.score.textContent = String(s.score);
     this.ui.best.textContent = String(s.best);
     this.ui.coins.textContent = String(s.coinsCollected);
-    const pct = Math.round(
-      ((s.speed - CONFIG.startSpeed) / (CONFIG.maxSpeed - CONFIG.startSpeed)) * 100,
+    const pct = Math.max(
+      0,
+      Math.round(
+        ((s.speed - CONFIG.startSpeed) / (CONFIG.maxSpeed - CONFIG.startSpeed)) * 100,
+      ),
     );
-    this.ui.speed.textContent = `${Math.max(0, pct)}%`;
+    // The chip appears only while the speed is actually climbing, per Apple's
+    // guidance to show and hide controls to reflect gameplay.
+    const climbing = s.phase === 'running' && s.speed < CONFIG.maxSpeed && pct > 0;
+    this.ui.boost.hidden = !climbing;
+    if (climbing) this.ui.speed.textContent = `${pct}%`;
   }
 }
 

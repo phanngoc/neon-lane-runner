@@ -1,11 +1,17 @@
+/* "Electric Rain": cool decor, warm hazards. The hazard red is reserved for
+   things that end a run and is never used for chrome. */
 :root {
-  --ink: #05010f;
-  --cyan: #25e5ff;
-  --pink: #ff2e88;
-  --mint: #7dfcd0;
-  --gold: #ffd447;
-  --panel: rgba(8, 3, 22, 0.86);
-  font-family: 'Trebuchet MS', 'Avenir Next', system-ui, sans-serif;
+  --ink: #060a1a;
+  --panel-bg: #101a33;
+  --cyan: #38bdf8;
+  --hazard: #ff4d3d;
+  --coin: #ffc94d;
+  --text: #f2f6ff;
+  --text-dim: #93a6cc;
+  --panel: rgba(16, 26, 51, 0.9);
+  /* Absolute floor for any text in the interface. */
+  --font-floor: 13px;
+  font-family: system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
 }
 
 * {
@@ -17,7 +23,7 @@ body {
   margin: 0;
   height: 100%;
   background: var(--ink);
-  color: #f4f0ff;
+  color: var(--text);
   overflow: hidden;
   overscroll-behavior: none;
   -webkit-tap-highlight-color: transparent;
@@ -26,14 +32,22 @@ body {
 #stage {
   position: fixed;
   inset: 0;
-  touch-action: none;
   user-select: none;
 }
 
+/* touch-action is scoped to the play surface and the pads. The overlay keeps
+   default touch behaviour so menu content stays scrollable and its buttons
+   activate normally on iOS. */
 #scene {
   display: block;
   width: 100%;
   height: 100%;
+  touch-action: none;
+}
+
+#pads,
+.pad {
+  touch-action: none;
 }
 
 #hud {
@@ -44,9 +58,10 @@ body {
   display: flex;
   align-items: center;
   gap: clamp(8px, 2.5vw, 22px);
-  padding: max(10px, env(safe-area-inset-top)) 14px 10px;
+  padding: max(10px, env(safe-area-inset-top)) max(14px, env(safe-area-inset-right)) 10px
+    max(14px, env(safe-area-inset-left));
   pointer-events: none;
-  background: linear-gradient(rgba(5, 1, 15, 0.72), rgba(5, 1, 15, 0));
+  background: linear-gradient(rgba(6, 10, 26, 0.78), rgba(6, 10, 26, 0));
 }
 
 .stat {
@@ -56,31 +71,47 @@ body {
   font-variant-numeric: tabular-nums;
 }
 
-.stat .label {
-  font-size: clamp(9px, 2.2vw, 11px);
-  letter-spacing: 0.16em;
+.stat .label,
+.chip .label {
+  /* 13px floor: the old 9px labels were below a readable default size. */
+  font-size: max(var(--font-floor), 0.82rem);
+  letter-spacing: 0.1em;
   text-transform: uppercase;
-  color: rgba(244, 240, 255, 0.55);
+  color: var(--text-dim);
 }
 
 .stat span:last-child {
-  font-size: clamp(16px, 4.4vw, 26px);
-  font-weight: 700;
-  color: var(--mint);
-  text-shadow: 0 0 12px rgba(125, 252, 208, 0.55);
+  font-size: clamp(17px, 4.6vw, 20px);
+  font-weight: 600;
+  color: var(--text);
 }
 
-#best + .stat,
-.stat:nth-child(2) span:last-child {
+/* The one number that matters is twice the size of the rest. */
+.stat.primary span:last-child {
+  font-size: clamp(26px, 7.2vw, 34px);
+  font-weight: 700;
   color: var(--cyan);
 }
 
-.stat:nth-child(3) span:last-child {
-  color: var(--gold);
+.chip {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  border: 1px solid rgba(56, 189, 248, 0.35);
+  background: rgba(56, 189, 248, 0.12);
+  font-variant-numeric: tabular-nums;
 }
 
-.stat:nth-child(4) span:last-child {
-  color: var(--pink);
+.chip[hidden] {
+  display: none;
+}
+
+.chip span:last-child {
+  font-size: max(var(--font-floor), 0.95rem);
+  font-weight: 700;
+  color: var(--cyan);
 }
 
 .tools {
@@ -90,15 +121,74 @@ body {
   pointer-events: auto;
 }
 
+.tools button:active {
+  background: rgba(56, 189, 248, 0.3);
+}
+
+/* 44 CSS px is the project's minimum touch target. */
 .tools button {
-  width: 40px;
-  height: 40px;
-  font-size: 17px;
-  border-radius: 12px;
-  border: 1px solid rgba(37, 229, 255, 0.4);
+  display: grid;
+  place-items: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border-radius: 13px;
+  border: 1px solid rgba(56, 189, 248, 0.4);
   background: var(--panel);
-  color: #f4f0ff;
+  color: var(--text);
   cursor: pointer;
+}
+
+/* Hand-drawn glyphs rather than emoji: an OS emoji cannot be sized or
+   contrast-checked reliably across platforms. */
+.glyph-pause,
+.glyph-sound,
+.glyph-fx {
+  display: block;
+  width: 18px;
+  height: 18px;
+}
+
+.glyph-pause {
+  border-left: 5px solid currentColor;
+  border-right: 5px solid currentColor;
+  width: 16px;
+}
+
+.glyph-sound {
+  border-left: 6px solid currentColor;
+  border-top: 9px solid transparent;
+  border-bottom: 9px solid transparent;
+  width: 0;
+  height: 0;
+  position: relative;
+}
+
+#mute[aria-pressed='true'] .glyph-sound::after {
+  content: '';
+  position: absolute;
+  left: -2px;
+  top: -1px;
+  width: 15px;
+  height: 2px;
+  background: var(--hazard);
+  transform: rotate(-40deg);
+}
+
+.glyph-fx {
+  border: 2px solid currentColor;
+  border-radius: 50%;
+  width: 16px;
+  height: 16px;
+}
+
+html[data-effects='reduced'] .glyph-fx {
+  border-style: dashed;
+}
+
+html[data-effects='minimal'] .glyph-fx {
+  border-style: dotted;
+  opacity: 0.6;
 }
 
 .tools button:disabled {
@@ -112,24 +202,27 @@ body {
   display: grid;
   grid-template-columns: 1fr 1fr 1fr 1fr;
   gap: 10px;
-  padding: 0 14px;
+  padding: 0 max(14px, env(safe-area-inset-left)) 0 max(14px, env(safe-area-inset-right));
   pointer-events: none;
 }
 
 .pad {
   pointer-events: auto;
-  height: clamp(52px, 13vw, 68px);
+  min-height: 56px;
+  height: clamp(56px, 13vw, 70px);
   border-radius: 16px;
   border: 1px solid rgba(255, 255, 255, 0.18);
   background: rgba(10, 4, 28, 0.55);
-  color: rgba(244, 240, 255, 0.8);
-  font-size: 20px;
+  color: var(--text);
+  font-size: 22px;
   cursor: pointer;
-  backdrop-filter: blur(4px);
 }
 
+/* Immediate, unmissable press feedback: the pad lights up on pointerdown, in
+   the same frame the action is dispatched. */
 .pad:active {
-  background: rgba(37, 229, 255, 0.28);
+  background: rgba(56, 189, 248, 0.34);
+  border-color: rgba(56, 189, 248, 0.8);
 }
 
 /* On pointer-precise devices the keyboard is the primary control scheme. */
@@ -158,10 +251,29 @@ body {
   text-align: center;
   background: radial-gradient(
     circle at 50% 45%,
-    rgba(42, 11, 74, 0.82),
-    rgba(5, 1, 15, 0.95)
+    rgba(16, 26, 51, 0.86),
+    rgba(6, 10, 26, 0.96)
   );
-  backdrop-filter: blur(3px);
+}
+
+/* The game-over screen must NOT blur or hide the scene: the hazard that ended
+   the run is the single most useful thing on screen. A flat scrim behind a
+   card keeps the hazard readable while the text stays legible. */
+#overlay[data-variant='over'] {
+  justify-content: flex-start;
+  padding-top: max(74px, calc(env(safe-area-inset-top) + 70px));
+  background: rgba(6, 10, 26, 0.34);
+}
+
+#overlay[data-variant='over'] > * {
+  max-width: min(32rem, 100%);
+}
+
+#overlay[data-variant='over'] h1,
+#overlay[data-variant='over'] #overlay-body {
+  padding: 0 16px;
+  background: rgba(6, 10, 26, 0.8);
+  border-radius: 14px;
 }
 
 #overlay[hidden] {
@@ -170,19 +282,75 @@ body {
 
 #overlay h1 {
   margin: 0;
-  font-size: clamp(28px, 8vw, 54px);
-  letter-spacing: 0.04em;
-  color: var(--mint);
-  text-shadow:
-    0 0 18px rgba(125, 252, 208, 0.6),
-    0 0 44px rgba(255, 46, 136, 0.35);
+  font-size: clamp(30px, 7.4vw, 46px);
+  line-height: 1.15;
+  letter-spacing: 0.01em;
+  color: var(--text);
+}
+
+/* Cause of death is the headline; it is warm because it names the failure. */
+#overlay[data-variant='over'] h1 {
+  color: var(--hazard);
+  padding: 8px 16px;
 }
 
 #overlay-body {
   max-width: 30rem;
-  font-size: clamp(13px, 3.4vw, 16px);
+  font-size: max(var(--font-floor), clamp(14px, 3.4vw, 16px));
   line-height: 1.55;
-  color: rgba(244, 240, 255, 0.86);
+  color: var(--text);
+  padding: 10px 0;
+}
+
+/* "New best" is a secondary badge, never the headline: the old build replaced
+   the cause of death with it, which hid every first-run failure. */
+#overlay-body .badge {
+  display: inline-block;
+  margin: 0 0 8px;
+  padding: 3px 12px;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 201, 77, 0.55);
+  background: rgba(255, 201, 77, 0.14);
+  color: var(--coin);
+  font-size: max(var(--font-floor), 0.85rem);
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+#overlay-body .advice {
+  color: var(--text);
+  font-size: max(var(--font-floor), clamp(14px, 3.6vw, 17px));
+}
+
+ul.missions {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+  text-align: left;
+  font-size: max(var(--font-floor), 0.9rem);
+}
+
+ul.missions li {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 7px 11px;
+  border-radius: 10px;
+  border: 1px solid rgba(147, 166, 204, 0.28);
+  color: var(--text-dim);
+}
+
+ul.missions li.hit {
+  border-color: rgba(255, 201, 77, 0.6);
+  color: var(--coin);
+}
+
+ul.missions .prog {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
 }
 
 #overlay-body p {
@@ -190,12 +358,13 @@ body {
 }
 
 #overlay-body .result {
-  font-size: clamp(20px, 5.5vw, 30px);
-  color: var(--gold);
+  font-size: clamp(20px, 5.5vw, 28px);
+  color: var(--coin);
 }
 
 #overlay-body .sub {
-  color: rgba(244, 240, 255, 0.65);
+  color: var(--text-dim);
+  font-size: max(var(--font-floor), 0.92rem);
 }
 
 ul.keys {
@@ -210,13 +379,34 @@ ul.keys {
 ul.keys span {
   display: inline-block;
   min-width: 1.6em;
-  padding: 1px 6px;
+  padding: 2px 7px;
   margin-right: 4px;
   border-radius: 6px;
-  border: 1px solid rgba(37, 229, 255, 0.45);
-  background: rgba(37, 229, 255, 0.1);
-  font-size: 0.88em;
+  border: 1px solid rgba(56, 189, 248, 0.45);
+  background: rgba(56, 189, 248, 0.12);
+  font-size: max(var(--font-floor), 0.9em);
   text-align: center;
+}
+
+/* Playable onboarding: one instruction at a time, over the live game. */
+#coach {
+  position: absolute;
+  left: 50%;
+  bottom: max(96px, calc(env(safe-area-inset-bottom) + 92px));
+  transform: translateX(-50%);
+  max-width: min(22rem, calc(100vw - 32px));
+  padding: 9px 16px;
+  border-radius: 999px;
+  background: rgba(6, 10, 26, 0.86);
+  border: 1px solid rgba(56, 189, 248, 0.4);
+  color: var(--text);
+  font-size: max(var(--font-floor), 0.95rem);
+  text-align: center;
+  pointer-events: none;
+}
+
+#coach[hidden] {
+  display: none;
 }
 
 #overlay-action {
@@ -227,10 +417,10 @@ ul.keys span {
   letter-spacing: 0.06em;
   border: none;
   border-radius: 999px;
-  background: linear-gradient(120deg, var(--pink), var(--cyan));
-  color: #05010f;
+  min-height: 48px;
+  background: var(--cyan);
+  color: #05101f;
   cursor: pointer;
-  box-shadow: 0 10px 30px rgba(255, 46, 136, 0.35);
 }
 
 #overlay-action:active {
@@ -239,7 +429,22 @@ ul.keys span {
 
 #overlay .hint {
   margin: 0;
-  font-size: 11px;
-  letter-spacing: 0.05em;
-  color: rgba(244, 240, 255, 0.4);
+  font-size: var(--font-floor);
+  letter-spacing: 0.04em;
+  color: var(--text-dim);
+}
+
+/* Nothing here animates today, but the declaration documents the contract and
+   covers any transition added later. The renderer reads the same preference
+   and drops shake and halves particle bursts. */
+@media (prefers-reduced-motion: reduce) {
+  * {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+
+  #overlay-action:active {
+    transform: none;
+  }
 }

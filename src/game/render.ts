@@ -52,21 +52,49 @@ export function cameraFor(cssWidth: number, cssHeight: number): {
   };
 }
 
+/**
+ * "Electric Rain" palette from the batch visual direction. The important rule
+ * is that the killing red is reserved: before this, `wall`, the road stripes
+ * and the decorative sun were all literally `#ff2e88`, so one hue meant both
+ * "this ends your run" and "this is scenery". Decor is now cool, hazards warm.
+ */
 const PALETTE = {
-  skyTop: '#05010f',
-  skyBottom: '#2a0b4a',
-  sun: '#ff2e88',
-  road: '#0b0718',
-  roadEdge: '#25e5ff',
-  lane: '#4a2f7a',
-  stripe: '#ff2e88',
-  wall: '#ff2e88',
-  hurdle: '#ffd447',
-  beam: '#25e5ff',
-  tram: '#8b5cf6',
-  coin: '#ffd447',
-  player: '#7dfcd0',
+  skyTop: '#060A1A',
+  skyBottom: '#101A33',
+  /** Decorative sun: cool, so it cannot be confused with a hazard. */
+  sun: '#4B3D8F',
+  road: '#1D2A4A',
+  roadEdge: '#38BDF8',
+  lane: '#2C3D66',
+  /** Road stripes: cool blue, released the red hue for hazards. */
+  stripe: '#38BDF8',
+  wall: '#FF4D3D',
+  hurdle: '#FFC94D',
+  beam: '#38BDF8',
+  tram: '#8A5CF6',
+  coin: '#FFC94D',
+  player: '#EAF4FF',
+  /** Rail / skyline furniture: cool violet, clearly not a hazard. */
+  decor: '#4B3D8F',
+  /** Outline shared by every hazard so shape reads even at low contrast. */
+  hazardEdge: '#FFFFFF',
 };
+
+/** Effect budget. Hard ceilings, not guidance: the pool never grows. */
+export const EFFECTS = {
+  /** Maximum simultaneous live particles. */
+  maxParticles: 64,
+  /** Maximum particles emitted by one burst. */
+  maxPerBurst: 12,
+  /** Longest particle lifetime, seconds. */
+  maxLife: 0.45,
+  /** Peak screen shake, CSS px. */
+  maxShakePx: 3,
+  /** Shake duration, seconds. */
+  shakeSeconds: 0.18,
+} as const;
+
+export type EffectLevel = 'full' | 'reduced' | 'minimal';
 
 interface Point {
   x: number;
@@ -94,8 +122,11 @@ export class Renderer {
   private horizon = 0;
   private cx = 0;
   private readonly skyline: number[] = [];
-  particles: Particle[] = [];
+  /** Fixed-size pool. Dead particles are recycled, so a frame allocates none. */
+  readonly particles: Particle[] = [];
+  private nextParticle = 0;
   shake = 0;
+  effects: EffectLevel = 'full';
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -107,6 +138,16 @@ export class Renderer {
       s = (s * 1103515245 + 12345) & 0x7fffffff;
       this.skyline.push((s % 1000) / 1000);
     }
+    for (let i = 0; i < EFFECTS.maxParticles; i++) {
+      this.particles.push({ x: 0, y: 0, vx: 0, vy: 0, life: 0, color: '' });
+    }
+  }
+
+  /** Live particles. Only used by tests and the perf probe. */
+  liveParticles(): number {
+    let n = 0;
+    for (const p of this.particles) if (p.life > 0) n += 1;
+    return n;
   }
 
   resize(cssWidth: number, cssHeight: number, dpr: number): void {
@@ -144,29 +185,39 @@ export class Renderer {
   }
 
   burst(count: number, x: number, y: number, color: string, power = 220): void {
-    for (let i = 0; i < count; i++) {
+    if (this.effects === 'minimal') return;
+    const budget = this.effects === 'reduced' ? EFFECTS.maxPerBurst / 2 : EFFECTS.maxPerBurst;
+    const n = Math.min(count, Math.floor(budget));
+    for (let i = 0; i < n; i++) {
+      // Round-robin over the pool: the oldest particle is overwritten rather
+      // than a new object allocated, so bursts cannot grow the heap.
+      const p = this.particles[this.nextParticle]!;
+      this.nextParticle = (this.nextParticle + 1) % this.particles.length;
       const a = Math.random() * Math.PI * 2;
       const s = power * (0.25 + Math.random() * 0.75);
-      this.particles.push({
-        x,
-        y,
-        vx: Math.cos(a) * s,
-        vy: Math.sin(a) * s - 60,
-        life: 0.35 + Math.random() * 0.45,
-        color,
-      });
+      p.x = x;
+      p.y = y;
+      p.vx = Math.cos(a) * s;
+      p.vy = Math.sin(a) * s - 60;
+      p.life = EFFECTS.maxLife * (0.6 + Math.random() * 0.4);
+      p.color = color;
     }
   }
 
+  /** Trigger the death shake. Bounded in both amplitude and duration. */
+  kick(): void {
+    this.shake = this.effects === 'full' ? 1 : 0;
+  }
+
   updateEffects(dt: number): void {
-    this.shake = Math.max(0, this.shake - dt * 2.2);
+    this.shake = Math.max(0, this.shake - dt / EFFECTS.shakeSeconds);
     for (const p of this.particles) {
+      if (p.life <= 0) continue;
       p.life -= dt;
       p.x += p.vx * dt;
       p.y += p.vy * dt;
       p.vy += 620 * dt;
     }
-    this.particles = this.particles.filter((p) => p.life > 0);
   }
 
   /** World position of a lane/height pair, in screen pixels (for particles). */
@@ -184,7 +235,7 @@ export class Renderer {
     ctx.fillRect(0, 0, this.w, this.h);
     ctx.save();
     if (this.shake > 0) {
-      const m = this.shake * 14;
+      const m = this.shake * EFFECTS.maxShakePx;
       ctx.translate((Math.random() - 0.5) * m, (Math.random() - 0.5) * m);
     }
     this.drawSky(state);
@@ -198,11 +249,13 @@ export class Renderer {
     for (const c of state.coins) {
       if (!c.collected) drawables.push({ z: c.z, paint: () => this.drawCoin(c, state) });
     }
+    // Particles are painted before the hazards on purpose: an explosion may
+    // decorate the scene but must never hide the thing that can kill you.
+    this.drawParticles();
     drawables.sort((a, b) => b.z - a.z);
     for (const d of drawables) d.paint();
 
     if (state.phase !== 'over') this.drawPlayer(state);
-    this.drawParticles();
     ctx.restore();
   }
 
@@ -224,14 +277,14 @@ export class Renderer {
       this.horizon,
       sunR,
     );
-    sg.addColorStop(0, 'rgba(255,46,136,0.85)');
-    sg.addColorStop(1, 'rgba(255,46,136,0)');
+    sg.addColorStop(0, hexToRgba(PALETTE.sun, 0.85));
+    sg.addColorStop(1, hexToRgba(PALETTE.sun, 0));
     ctx.fillStyle = sg;
     ctx.fillRect(this.cx - sunR, this.horizon - sunR, sunR * 2, sunR * 2);
 
     // Parallax skyline.
     const offset = (state.distance * 3.5) % 40;
-    ctx.fillStyle = 'rgba(10,4,28,0.92)';
+    ctx.fillStyle = hexToRgba(PALETTE.skyBottom, 0.94);
     const bw = this.w / 22;
     for (let i = -1; i < 24; i++) {
       const seed = this.skyline[(i + 40) % this.skyline.length]!;
@@ -239,7 +292,7 @@ export class Renderer {
       const x = i * bw - offset;
       ctx.fillRect(x, this.horizon - bh, bw * 0.86, bh);
     }
-    ctx.fillStyle = 'rgba(37,229,255,0.55)';
+    ctx.fillStyle = hexToRgba(PALETTE.roadEdge, 0.55);
     ctx.fillRect(0, this.horizon - 1.5, this.w, 1.5);
   }
 
@@ -271,7 +324,7 @@ export class Renderer {
       if (!a || !b) continue;
       const wA = ROAD_HALF * this.scaleAt(z);
       const wB = ROAD_HALF * this.scaleAt(z + 0.9);
-      ctx.fillStyle = `rgba(255,46,136,${Math.max(0, 0.22 - i * 0.012)})`;
+      ctx.fillStyle = hexToRgba(PALETTE.stripe, Math.max(0, 0.16 - i * 0.009));
       ctx.beginPath();
       ctx.moveTo(this.cx - wA, a.y);
       ctx.lineTo(this.cx + wA, a.y);
@@ -325,13 +378,13 @@ export class Renderer {
         const top = this.project(laneX, 3.2, z);
         if (!base || !top) continue;
         const alpha = Math.max(0, 0.7 - i * 0.05);
-        ctx.strokeStyle = `rgba(139,92,246,${alpha})`;
+        ctx.strokeStyle = hexToRgba(PALETTE.decor, alpha);
         ctx.lineWidth = Math.max(1, 5 * this.scaleAt(z) * 0.02);
         ctx.beginPath();
         ctx.moveTo(base.x, base.y);
         ctx.lineTo(top.x, top.y);
         ctx.stroke();
-        ctx.fillStyle = `rgba(37,229,255,${alpha})`;
+        ctx.fillStyle = hexToRgba(PALETTE.roadEdge, alpha * 0.8);
         const r = Math.max(1, 6 * this.scaleAt(z) * 0.02);
         ctx.beginPath();
         ctx.arc(top.x, top.y, r, 0, Math.PI * 2);
@@ -365,7 +418,11 @@ export class Renderer {
           : o.kind === 'beam'
             ? PALETTE.beam
             : PALETTE.tram;
-    const hw = 0.4;
+    // Silhouette differs by kind, not just colour: a wall is a narrow full
+    // slab, a tram is narrower still but very long, a hurdle is low and wide,
+    // a beam is wide and hangs from above.
+    const hw =
+      o.kind === 'tram' ? 0.34 : o.kind === 'hurdle' ? 0.43 : o.kind === 'beam' ? 0.45 : 0.4;
     const zf = o.z + o.depth;
     if (zf <= this.nearZ) return;
     const zn = Math.max(o.z, this.nearZ);
@@ -390,28 +447,136 @@ export class Renderer {
       edge,
     );
 
-    // Hazard chevrons on the near face give a quick read of the required action.
-    const a = p(-hw * 0.7, o.yMin + (o.yMax - o.yMin) * 0.5, zn);
-    const b = p(hw * 0.7, o.yMin + (o.yMax - o.yMin) * 0.5, zn);
-    if (a && b && Math.abs(b.x - a.x) > 10) {
+    // A white outline on the near face carries the shape even when the fill
+    // fades with distance, so silhouette never depends on colour alone.
+    const nf = [p(-hw, o.yMin, zn), p(hw, o.yMin, zn), p(hw, o.yMax, zn), p(-hw, o.yMax, zn)];
+    if (!nf.some((q) => q === null)) {
       const ctx = this.ctx;
-      ctx.strokeStyle = edge;
-      ctx.lineWidth = Math.max(1, (b.x - a.x) * 0.08);
-      ctx.beginPath();
-      if (o.kind === 'hurdle') {
-        ctx.moveTo(a.x, a.y);
-        ctx.lineTo((a.x + b.x) / 2, a.y - (b.x - a.x) * 0.35);
-        ctx.lineTo(b.x, a.y);
-      } else if (o.kind === 'beam') {
-        ctx.moveTo(a.x, a.y - (b.x - a.x) * 0.2);
-        ctx.lineTo((a.x + b.x) / 2, a.y + (b.x - a.x) * 0.18);
-        ctx.lineTo(b.x, a.y - (b.x - a.x) * 0.2);
-      } else {
-        ctx.moveTo(a.x, a.y - (b.x - a.x) * 0.2);
-        ctx.lineTo(b.x, a.y + (b.x - a.x) * 0.2);
-        ctx.moveTo(b.x, a.y - (b.x - a.x) * 0.2);
-        ctx.lineTo(a.x, a.y + (b.x - a.x) * 0.2);
+      const wpx = Math.abs(nf[1]!.x - nf[0]!.x);
+      if (wpx > 8) {
+        ctx.strokeStyle = `rgba(255,255,255,${0.75 * fade})`;
+        ctx.lineWidth = Math.max(1, Math.min(3, wpx * 0.035));
+        ctx.beginPath();
+        ctx.moveTo(nf[0]!.x, nf[0]!.y);
+        for (let i = 1; i < 4; i++) ctx.lineTo(nf[i]!.x, nf[i]!.y);
+        ctx.closePath();
+        ctx.stroke();
+        this.drawMarkings(o, p, hw, zn, zf, edge, wpx, fade);
       }
+    }
+  }
+
+  /**
+   * Kind-specific markings on the near face. Each one states the required
+   * answer: slashes = go around, rail = jump, hangers = duck, window band and
+   * 45-degree stripes = a long blocker you must leave early.
+   */
+  private drawMarkings(
+    o: Obstacle,
+    p: (dx: number, y: number, z: number) => Point | null,
+    hw: number,
+    zn: number,
+    zf: number,
+    edge: string,
+    wpx: number,
+    fade: number,
+  ): void {
+    const ctx = this.ctx;
+    const mid = o.yMin + (o.yMax - o.yMin) * 0.5;
+    ctx.strokeStyle = edge;
+    ctx.lineWidth = Math.max(1, wpx * 0.06);
+
+    if (o.kind === 'wall') {
+      // Three diagonal slashes across the slab.
+      for (let i = 0; i < 3; i++) {
+        const t = 0.25 + i * 0.25;
+        const a = p(-hw * 0.8, o.yMin + (o.yMax - o.yMin) * (t - 0.16), zn);
+        const b = p(hw * 0.8, o.yMin + (o.yMax - o.yMin) * (t + 0.16), zn);
+        if (!a || !b) continue;
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo(b.x, b.y);
+        ctx.stroke();
+      }
+      return;
+    }
+
+    if (o.kind === 'hurdle') {
+      // A rail floating just above the box, on two posts: jump it.
+      const railY = o.yMax + 0.22;
+      const l = p(-hw, railY, zn);
+      const r = p(hw, railY, zn);
+      const lb = p(-hw * 0.85, o.yMax, zn);
+      const rb = p(hw * 0.85, o.yMax, zn);
+      if (l && r && lb && rb) {
+        ctx.beginPath();
+        ctx.moveTo(l.x, l.y);
+        ctx.lineTo(r.x, r.y);
+        ctx.moveTo(lb.x, lb.y);
+        ctx.lineTo(l.x + wpx * 0.08, l.y);
+        ctx.moveTo(rb.x, rb.y);
+        ctx.lineTo(r.x - wpx * 0.08, r.y);
+        ctx.stroke();
+      }
+      // Up chevron.
+      const a = p(-hw * 0.6, mid, zn);
+      const b = p(hw * 0.6, mid, zn);
+      if (a && b) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo((a.x + b.x) / 2, a.y - wpx * 0.3);
+        ctx.lineTo(b.x, a.y);
+        ctx.stroke();
+      }
+      return;
+    }
+
+    if (o.kind === 'beam') {
+      // Two hangers reaching up out of frame: it is suspended, so duck.
+      for (const sx of [-0.62, 0.62]) {
+        const base = p(hw * sx, o.yMax, zn);
+        const top = p(hw * sx, o.yMax + 1.4, zn);
+        if (!base || !top) continue;
+        ctx.beginPath();
+        ctx.moveTo(base.x, base.y);
+        ctx.lineTo(top.x, top.y);
+        ctx.stroke();
+      }
+      // Down chevron on the underside.
+      const a = p(-hw * 0.6, o.yMin + 0.28, zn);
+      const b = p(hw * 0.6, o.yMin + 0.28, zn);
+      if (a && b) {
+        ctx.beginPath();
+        ctx.moveTo(a.x, a.y);
+        ctx.lineTo((a.x + b.x) / 2, a.y + wpx * 0.3);
+        ctx.lineTo(b.x, a.y);
+        ctx.stroke();
+      }
+      return;
+    }
+
+    // Tram: a lit window band plus 45-degree warning stripes below it. The
+    // band also runs down the visible side so the length reads at a glance.
+    const bandLo = o.yMin + (o.yMax - o.yMin) * 0.55;
+    const bandHi = o.yMin + (o.yMax - o.yMin) * 0.78;
+    this.quad(
+      [p(-hw * 0.82, bandLo, zn), p(hw * 0.82, bandLo, zn), p(hw * 0.82, bandHi, zn), p(-hw * 0.82, bandHi, zn)],
+      `rgba(226,232,255,${0.5 + 0.35 * fade})`,
+    );
+    const sideZ = Math.min(zf, zn + 9);
+    this.quad(
+      [p(hw, bandLo, zn), p(hw, bandLo, sideZ), p(hw, bandHi, sideZ), p(hw, bandHi, zn)],
+      `rgba(226,232,255,${0.18 + 0.16 * fade})`,
+    );
+    ctx.lineWidth = Math.max(1, wpx * 0.09);
+    for (let i = 0; i < 3; i++) {
+      const t = 0.1 + i * 0.14;
+      const a = p(-hw * 0.8 + i * hw * 0.5, o.yMin + (o.yMax - o.yMin) * t, zn);
+      const b = p(-hw * 0.3 + i * hw * 0.5, o.yMin + (o.yMax - o.yMin) * (t + 0.14), zn);
+      if (!a || !b) continue;
+      ctx.beginPath();
+      ctx.moveTo(a.x, a.y);
+      ctx.lineTo(b.x, b.y);
       ctx.stroke();
     }
   }
@@ -452,7 +617,7 @@ export class Renderer {
     ctx.fill();
 
     // Speed trail.
-    ctx.strokeStyle = 'rgba(125,252,208,0.28)';
+    ctx.strokeStyle = hexToRgba(PALETTE.player, 0.22);
     ctx.lineWidth = bodyW * 0.5;
     ctx.beginPath();
     ctx.moveTo(base.x, base.y);
@@ -475,7 +640,7 @@ export class Renderer {
     ctx.restore();
 
     // Visor stripe for a bit of character.
-    ctx.fillStyle = '#05010f';
+    ctx.fillStyle = PALETTE.skyTop;
     ctx.fillRect(
       base.x - bodyW * 0.22,
       topY + (bottomY - topY) * 0.11,
@@ -487,6 +652,7 @@ export class Renderer {
   private drawParticles(): void {
     const ctx = this.ctx;
     for (const p of this.particles) {
+      if (p.life <= 0) continue;
       ctx.globalAlpha = Math.max(0, Math.min(1, p.life * 2));
       ctx.fillStyle = p.color;
       ctx.fillRect(p.x - 2, p.y - 2, 4, 4);

@@ -21,6 +21,9 @@ const ui: Ui = {
   overlayAction: need<HTMLButtonElement>('overlay-action'),
   pauseButton: need<HTMLButtonElement>('pause'),
   muteButton: need<HTMLButtonElement>('mute'),
+  effectsButton: need<HTMLButtonElement>('effects'),
+  boost: need('boost'),
+  coach: need('coach'),
   pads: need('pads'),
 };
 
